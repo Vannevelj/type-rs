@@ -1,0 +1,10 @@
+{
+    "recommendations": [
+        "bungcip.better-toml",
+        "ms-vscode.cpptools",
+        "serayuzgur.crates",
+        "usernamehw.errorlens",
+        "matklad.rust-analyzer",
+        "vadimcn.vscode-lldb"
+    ]
+}
