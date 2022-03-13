@@ -1,6 +1,6 @@
 use log::error;
 use swc_common::SourceFile;
-use swc_ecma_ast::{Decl, FnDecl, Ident, Module, Param, Pat};
+use swc_ecma_ast::{Decl, FnDecl, Module, Param, Pat};
 use swc_ecma_codegen::{
     text_writer::{self, JsWriter},
     Config, Emitter,
