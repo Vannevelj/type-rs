@@ -1,9 +1,7 @@
 mod parser;
 
 use swc_common::sync::Lrc;
-use swc_common::{
-    FileName, SourceMap,
-};
+use swc_common::{FileName, SourceMap};
 
 use crate::parser::parse;
 
@@ -21,7 +19,7 @@ fn main() {
     let file = cm.new_source_file(
         FileName::Custom("test.js".into()),
         "function foo() {}".into(),
-    );    
+    );
 
     let module = parse(&file);
     println!("Module: {module:?}");

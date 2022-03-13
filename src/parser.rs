@@ -1,7 +1,11 @@
 use log::error;
 use swc_common::SourceFile;
-use swc_ecma_ast::{Module, Decl, FnDecl, Ident, Param, Pat};
-use swc_ecma_parser::{lexer::Lexer, StringInput, Syntax, Parser};
+use swc_ecma_ast::{Decl, FnDecl, Ident, Module, Param, Pat};
+use swc_ecma_codegen::{
+    text_writer::{self, JsWriter},
+    Config, Emitter,
+};
+use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax};
 
 pub fn parse(file: &SourceFile) -> Module {
     let lexer = create_lexer(file);
@@ -15,67 +19,73 @@ pub fn parse(file: &SourceFile) -> Module {
 }
 
 pub fn add_types(module: Module) -> String {
-    let mut result = String::from("");
-
     for module_item in module.body {
         println!("module_item: {module_item:?}");
         match module_item.as_stmt() {
-            Some(statement) => {
-                match statement.as_decl() {
-                    Some(Decl::Fn(function)) => {
-                        result += &render_function_declaration(function);
-                        print!("found function: {function:?}")
-                    }
-                    _ => println!("not a function")
+            Some(statement) => match statement.as_decl() {
+                Some(Decl::Fn(function)) => {
+                    render_function_declaration(function);
+                    print!("found function: {function:?}")
                 }
-            }
+                _ => println!("not a function"),
+            },
             None => println!("not a statement"),
         }
     }
 
-    result
+    render_module(module)
 }
 
-fn render_function_declaration(declaration: &FnDecl) -> String {
-    let mut result = String::from("");
-    result += "function ";
-    result += &render_ident(&declaration.ident);
-    result += "(";
+fn render_function_declaration(declaration: &FnDecl) {
     for param in &declaration.function.params {
-        result += &render_param(param);
+        render_param(param);
     }
-    result += ")";
-    result += " ";
-    result += "{";
-    result += "}";
-
-    result
 }
 
-fn render_ident(ident: &Ident) -> String {
-    let mut result = String::from("");
-    result += &ident.sym.to_string();
-
-    result
+fn render_param(param: &Param) {
+    render_pat(param.pat);
 }
 
-fn render_param(param: &Param) -> String {
-    let mut result = String::from("");
-    result += &render_pat(param.pat.clone());
-    result += ": any";
-
-    result
-}
-
-fn render_pat(pat: Pat) -> String {
-    let mut result = String::from("");
-    let rendered_ident = match pat.ident() {
-        Some(found) => found.id.sym.to_string(),
+fn render_pat(pat: Pat) -> Pat {
+    match pat.ident() {
+        Some(found) => found.type_ann = Some("any"),
         None => todo!(),
     };
 
-    result += &rendered_ident;
-    result
+    pat
+}
+
+fn render_module(module: Module) -> String {
+    let mut buf = vec![];
+    {
+        let mut wr = Box::new(JsWriter::with_target(
+            self.cm.clone(),
+            "\n",
+            &mut buf,
+            if source_map.enabled() {
+                Some(&mut src_map_buf)
+            } else {
+                None
+            },
+            target,
+        )) as Box<dyn WriteJs>;
+
+        if minify {
+            wr = Box::new(text_writer::omit_trailing_semi(wr));
+        }
+
+        let mut emitter = Emitter {
+            cfg: Config { minify },
+            comments,
+            cm: self.cm.clone(),
+            wr,
+        };
+
+        node.emit_with(&mut emitter)
+            .context("failed to emit module")?;
+    }
+    // Invalid utf8 is valid in javascript world.
+    String::from_utf8(buf).expect("invalid utf8 character detected")
 }
 
 fn create_lexer(file: &SourceFile) -> Lexer<StringInput> {
@@ -90,8 +100,8 @@ fn create_lexer(file: &SourceFile) -> Lexer<StringInput> {
 
 #[cfg(test)]
 mod tests {
-    use swc_common::{FileName, SourceMap};
     use swc_common::sync::Lrc;
+    use swc_common::{FileName, SourceMap};
 
     use super::*;
 
