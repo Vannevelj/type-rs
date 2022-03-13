@@ -1,8 +1,8 @@
 use log::error;
-use swc_common::SourceFile;
-use swc_ecma_ast::{Decl, FnDecl, Module, Param, Pat};
+use swc_common::{SourceFile};
+use swc_ecma_ast::{Decl, FnDecl, Module, Param, Pat, EsVersion};
 use swc_ecma_codegen::{
-    text_writer::{self, JsWriter},
+    text_writer::{JsWriter, WriteJs},
     Config, Emitter,
 };
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax};
@@ -18,8 +18,8 @@ pub fn parse(file: &SourceFile) -> Module {
         .expect("failed to parse module")
 }
 
-pub fn add_types(module: Module) -> String {
-    for module_item in module.body {
+pub fn add_types(module: &Module) -> String {
+    for module_item in &module.body {
         println!("module_item: {module_item:?}");
         match module_item.as_stmt() {
             Some(statement) => match statement.as_decl() {
@@ -33,7 +33,7 @@ pub fn add_types(module: Module) -> String {
         }
     }
 
-    render_module(module)
+    render_module(&module)
 }
 
 fn render_function_declaration(declaration: &FnDecl) {
@@ -43,56 +43,45 @@ fn render_function_declaration(declaration: &FnDecl) {
 }
 
 fn render_param(param: &Param) {
-    render_pat(param.pat);
+    render_pat(&param.pat);
 }
 
-fn render_pat(pat: Pat) -> Pat {
-    match pat.ident() {
-        Some(found) => found.type_ann = Some("any"),
+fn render_pat(pat: &Pat) {
+    match pat.clone().ident() {
+        Some(found) => {},
         None => todo!(),
-    };
-
-    pat
+    }
 }
 
-fn render_module(module: Module) -> String {
+fn render_module(module: &Module) -> String {
     let mut buf = vec![];
+    let cm: swc_common::sync::Lrc<swc_common::SourceMap> = Default::default();
     {
-        let mut wr = Box::new(JsWriter::with_target(
-            self.cm.clone(),
+        let wr = Box::new(JsWriter::with_target(
+            cm.clone(),
             "\n",
             &mut buf,
-            if source_map.enabled() {
-                Some(&mut src_map_buf)
-            } else {
-                None
-            },
-            target,
+            None,
+            EsVersion::Es5,
         )) as Box<dyn WriteJs>;
 
-        if minify {
-            wr = Box::new(text_writer::omit_trailing_semi(wr));
-        }
-
         let mut emitter = Emitter {
-            cfg: Config { minify },
-            comments,
-            cm: self.cm.clone(),
+            cfg: Config { minify: false },
+            comments: None,
+            cm: cm.clone(),
             wr,
         };
 
-        node.emit_with(&mut emitter)
-            .context("failed to emit module")?;
+        emitter.emit_module(&module).expect("Failed to emit module");
     }
-    // Invalid utf8 is valid in javascript world.
+
     String::from_utf8(buf).expect("invalid utf8 character detected")
 }
 
 fn create_lexer(file: &SourceFile) -> Lexer<StringInput> {
     Lexer::new(
         Syntax::Es(Default::default()),
-        // EsVersion defaults to es5
-        Default::default(),
+        EsVersion::Es5,
         StringInput::from(&*file),
         None,
     )
@@ -114,7 +103,7 @@ mod tests {
         );
 
         let module = parse(&file);
-        let result = add_types(module);
+        let result = add_types(&module);
 
         assert_eq!("function foo(a: any) {}", result);
     }
