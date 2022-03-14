@@ -31,7 +31,7 @@ pub fn add_types(module: &mut Module) -> String {
         }
     }
 
-    update_module(&module)
+    update_module(module)
 }
 
 fn update_function_declaration(declaration: &mut FnDecl) {
@@ -45,7 +45,6 @@ fn update_param(param: &mut Param) {
 }
 
 fn update_pat(pat: &mut Pat) {
-    let mut ident = pat.as_ident();
     match pat {
         Pat::Ident(found) => {
             let any_keyword = TsKeywordType {
@@ -79,11 +78,11 @@ fn update_module(module: &Module) -> String {
         let mut emitter = Emitter {
             cfg: Config { minify: false },
             comments: None,
-            cm: cm.clone(),
+            cm,
             wr,
         };
 
-        emitter.emit_module(&module).expect("Failed to emit module");
+        emitter.emit_module(module).expect("Failed to emit module");
     }
 
     String::from_utf8(buf).expect("invalid utf8 character detected")
