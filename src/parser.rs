@@ -1,8 +1,8 @@
 use log::error;
 use swc_common::{SourceFile, Span};
 use swc_ecma_ast::{
-    Decl, EsVersion, FnDecl, Module, Param, Pat, TsKeywordType, TsKeywordTypeKind,
-    TsType, TsTypeAnn,
+    Decl, EsVersion, FnDecl, Module, ModuleItem, Param, Pat, Stmt, TsKeywordType,
+    TsKeywordTypeKind, TsType, TsTypeAnn,
 };
 use swc_ecma_codegen::{
     text_writer::{JsWriter, WriteJs},
@@ -23,14 +23,13 @@ pub fn parse(file: &SourceFile) -> Module {
 
 pub fn add_types(module: &mut Module) -> String {
     for module_item in &mut module.body {
-        let declaration = module_item.as_stmt().and_then(|st| st.as_decl());
-        match declaration {
-            Some(Decl::Fn(mut function)) => {
-                update_function_declaration(&mut function);
+        match module_item {
+            ModuleItem::Stmt(Stmt::Decl(Decl::Fn(ref mut function))) => {
+                update_function_declaration(function)
             }
             _ => println!("not a statement"),
         }
-    };
+    }
 
     update_module(&module)
 }
@@ -46,7 +45,8 @@ fn update_param(param: &mut Param) {
 }
 
 fn update_pat(pat: &mut Pat) {
-    match pat.ident() {
+    let ident = pat.ident();
+    match ident {
         Some(mut found) => {
             let any_keyword = TsKeywordType {
                 span: Span::default(),
@@ -60,7 +60,7 @@ fn update_pat(pat: &mut Pat) {
 
             found.type_ann = Some(type_annotation);
         }
-        None => todo!(),
+        _ => todo!(),
     };
 }
 
