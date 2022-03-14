@@ -45,9 +45,9 @@ fn update_param(param: &mut Param) {
 }
 
 fn update_pat(pat: &mut Pat) {
-    let ident = pat.ident();
-    match ident {
-        Some(mut found) => {
+    let mut ident = pat.as_ident();
+    match pat {
+        Pat::Ident(found) => {
             let any_keyword = TsKeywordType {
                 span: Span::default(),
                 kind: TsKeywordTypeKind::TsAnyKeyword,
@@ -61,7 +61,7 @@ fn update_pat(pat: &mut Pat) {
             found.type_ann = Some(type_annotation);
         }
         _ => todo!(),
-    };
+    }
 }
 
 fn update_module(module: &Module) -> String {
@@ -113,9 +113,9 @@ mod tests {
             "function foo(a) {}".into(),
         );
 
-        let module = parse(&file);
-        let result = add_types(module);
+        let mut module = parse(&file);
+        let result = add_types(&mut module);
 
-        assert_eq!("function foo(a: any) {}", result);
+        assert_eq!("function foo(a: any) {}\n", result);
     }
 }
