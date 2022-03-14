@@ -46,7 +46,7 @@ fn update_param(param: &mut Param) {
 
 fn update_pat(pat: &mut Pat) {
     match pat {
-        Pat::Ident(found) => {
+        Pat::Ident(ident) => {
             let any_keyword = TsKeywordType {
                 span: Span::default(),
                 kind: TsKeywordTypeKind::TsAnyKeyword,
@@ -57,7 +57,7 @@ fn update_pat(pat: &mut Pat) {
                 type_ann: Box::new(TsType::TsKeywordType(any_keyword)),
             };
 
-            found.type_ann = Some(type_annotation);
+            ident.type_ann = Some(type_annotation);
         }
         _ => todo!(),
     }
@@ -116,5 +116,27 @@ mod tests {
         let result = add_types(&mut module);
 
         assert_eq!("function foo(a: any) {}\n", result);
+    }
+
+    #[test]
+    fn add_types_formats_whitespace() {
+        let cm: Lrc<SourceMap> = Default::default();
+        let file = cm.new_source_file(
+            FileName::Custom("test.js".into()),
+            "function foo(
+                a,
+                b,
+                c
+            ) {
+                console.log(test);
+            }".into(),
+        );
+
+        let mut module = parse(&file);
+        let result = add_types(&mut module);
+
+        assert_eq!("function foo(a: any, b: any, c: any) {
+    console.log(test);
+}\n", result);
     }
 }
