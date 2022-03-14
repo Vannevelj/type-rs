@@ -1,6 +1,9 @@
 use log::error;
-use swc_common::{SourceFile};
-use swc_ecma_ast::{Decl, FnDecl, Module, Param, Pat, EsVersion};
+use swc_common::{SourceFile, Span};
+use swc_ecma_ast::{
+    Decl, EsVersion, FnDecl, Module, Param, Pat, TsKeywordType, TsKeywordTypeKind,
+    TsType, TsTypeAnn,
+};
 use swc_ecma_codegen::{
     text_writer::{JsWriter, WriteJs},
     Config, Emitter,
@@ -18,42 +21,50 @@ pub fn parse(file: &SourceFile) -> Module {
         .expect("failed to parse module")
 }
 
-pub fn add_types(module: &Module) -> String {
-    for module_item in &module.body {
-        println!("module_item: {module_item:?}");
-        match module_item.as_stmt() {
-            Some(statement) => match statement.as_decl() {
-                Some(Decl::Fn(function)) => {
-                    render_function_declaration(function);
-                    print!("found function: {function:?}")
-                }
-                _ => println!("not a function"),
-            },
-            None => println!("not a statement"),
+pub fn add_types(module: &mut Module) -> String {
+    for module_item in &mut module.body {
+        let declaration = module_item.as_stmt().and_then(|st| st.as_decl());
+        match declaration {
+            Some(Decl::Fn(mut function)) => {
+                update_function_declaration(&mut function);
+            }
+            _ => println!("not a statement"),
         }
+    };
+
+    update_module(&module)
+}
+
+fn update_function_declaration(declaration: &mut FnDecl) {
+    for param in &mut declaration.function.params {
+        update_param(param);
     }
-
-    render_module(&module)
 }
 
-fn render_function_declaration(declaration: &FnDecl) {
-    for param in &declaration.function.params {
-        render_param(param);
-    }
+fn update_param(param: &mut Param) {
+    update_pat(&mut param.pat);
 }
 
-fn render_param(param: &Param) {
-    render_pat(&param.pat);
-}
+fn update_pat(pat: &mut Pat) {
+    match pat.ident() {
+        Some(mut found) => {
+            let any_keyword = TsKeywordType {
+                span: Span::default(),
+                kind: TsKeywordTypeKind::TsAnyKeyword,
+            };
 
-fn render_pat(pat: &Pat) {
-    match pat.clone().ident() {
-        Some(found) => {},
+            let type_annotation: TsTypeAnn = TsTypeAnn {
+                span: Span::default(),
+                type_ann: Box::new(TsType::TsKeywordType(any_keyword)),
+            };
+
+            found.type_ann = Some(type_annotation);
+        }
         None => todo!(),
-    }
+    };
 }
 
-fn render_module(module: &Module) -> String {
+fn update_module(module: &Module) -> String {
     let mut buf = vec![];
     let cm: swc_common::sync::Lrc<swc_common::SourceMap> = Default::default();
     {
@@ -103,7 +114,7 @@ mod tests {
         );
 
         let module = parse(&file);
-        let result = add_types(&module);
+        let result = add_types(module);
 
         assert_eq!("function foo(a: any) {}", result);
     }
