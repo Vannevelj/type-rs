@@ -104,39 +104,34 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn add_types_function() {
+    fn compare(input: &str, output: &str) {
         let cm: Lrc<SourceMap> = Default::default();
-        let file = cm.new_source_file(
-            FileName::Custom("test.js".into()),
-            "function foo(a) {}".into(),
-        );
+        let file = cm.new_source_file(FileName::Custom("test.js".into()), input.into());
 
         let mut module = parse(&file);
         let result = add_types(&mut module);
 
-        assert_eq!("function foo(a: any) {}\n", result);
+        assert_eq!(output, result);
     }
 
     #[test]
-    fn add_types_formats_whitespace() {
-        let cm: Lrc<SourceMap> = Default::default();
-        let file = cm.new_source_file(
-            FileName::Custom("test.js".into()),
+    fn add_types_function() {
+        compare("function foo(a) {}", "function foo(a: any) {}\n");
+    }
+
+    #[test]
+    fn add_types_whitespace() {
+        compare(
             "function foo(
-                a,
-                b,
-                c
-            ) {
-                console.log(test);
-            }".into(),
-        );
-
-        let mut module = parse(&file);
-        let result = add_types(&mut module);
-
-        assert_eq!("function foo(a: any, b: any, c: any) {
+            a,
+            b,
+            c
+        ) {
+            console.log(test);
+        }",
+            "function foo(a: any, b: any, c: any) {
     console.log(test);
-}\n", result);
+}\n",
+        );
     }
 }
