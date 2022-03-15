@@ -210,7 +210,7 @@ mod tests {
 
     use super::*;
 
-    fn compare(input: &str, output: &str) {
+    fn compare(input: &str, expected_output: &str) {
         // env_logger::init_from_env(
         //     env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"),
         // );
@@ -219,52 +219,52 @@ mod tests {
         let file = cm.new_source_file(FileName::Custom("test.js".into()), input.into());
 
         let mut module = parse(&file);
-        let result = add_types(&mut module, cm);
+        let actual_output = add_types(&mut module, cm);
 
-        assert_eq!(output, result);
+        assert_eq!(format!("{expected_output}\n"), actual_output);
     }
 
     #[test]
     fn add_types_function() {
-        compare("function foo(a) {}", "function foo(a: any) {}\n");
+        compare("function foo(a) {}", "function foo(a: any) {}");
     }
 
     #[test]
     fn add_types_function_default_value() {
-        compare("function foo(a = 5) {}", "function foo(a: any = 5) {}\n");
+        compare("function foo(a = 5) {}", "function foo(a: any = 5) {}");
     }
 
     #[test]
     fn add_types_function_multi_param() {
         compare(
             "function foo(a, b, c) {}",
-            "function foo(a: any, b: any, c: any) {}\n",
+            "function foo(a: any, b: any, c: any) {}",
         );
     }
 
     #[test]
     fn add_types_variable_no_initializer() {
-        compare("let x;", "let x: any;\n");
+        compare("let x;", "let x: any;");
     }
 
     #[test]
     fn add_types_variable_let() {
-        compare("let x = 5;", "let x: any = 5;\n");
+        compare("let x = 5;", "let x: any = 5;");
     }
 
     #[test]
     fn add_types_variable_const() {
-        compare("const x = 5;", "const x: any = 5;\n");
+        compare("const x = 5;", "const x: any = 5;");
     }
 
     #[test]
     fn add_types_variable_var() {
-        compare("var x = 5;", "var x: any = 5;\n");
+        compare("var x = 5;", "var x: any = 5;");
     }
 
     #[test]
     fn add_types_variable_multi() {
-        compare("let x = 5, y = 6;", "let x: any = 5, y: any = 6;\n");
+        compare("let x = 5, y = 6;", "let x: any = 5, y: any = 6;");
     }
 
     #[test]
@@ -273,7 +273,7 @@ mod tests {
             "function foo() { let x = 5; }",
             "function foo() {
     let x: any = 5;
-}\n",
+}",
         );
     }
 
@@ -289,25 +289,22 @@ mod tests {
         }",
             "function foo(a: any, b: any, c: any) {
     console.log(test);
-}\n",
+}",
         );
     }
 
     #[test]
     fn add_types_array() {
-        compare("const x = [];", "const x: any[] = [];\n");
+        compare("const x = [];", "const x: any[] = [];");
     }
 
     #[test]
     fn add_types_array_function_default_value() {
-        compare(
-            "function foo(a = []) {}",
-            "function foo(a: any[] = []) {}\n",
-        );
+        compare("function foo(a = []) {}", "function foo(a: any[] = []) {}");
     }
 
     #[test]
     fn add_types_preexisting_type() {
-        compare("let x: number = 5;", "let x: number = 5;\n");
+        compare("let x: number = 5;", "let x: number = 5;");
     }
 }
