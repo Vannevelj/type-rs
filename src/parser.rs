@@ -104,7 +104,7 @@ fn update_function_declaration(declaration: &mut FnDecl) {
 fn update_variable_declaration(declaration: &mut VarDecl) {
     for declarator in &mut declaration.decls {
         info!("var_declarator: {declarator:?}");
-        let type_ann = match declarator.init.clone() {
+        let type_ann = match declarator.init {
             Some(ref mut initializer) => Some(get_type_from_expression(&mut *initializer)),
             None => None,
         };
@@ -120,7 +120,11 @@ fn update_pat(pat: &mut Pat, with_type: Option<TsTypeAnn>) {
     let with_type = with_type.unwrap_or(create_any_type());
     info!("pat: {pat:?}");
     match pat {
-        Pat::Ident(ident) => ident.type_ann = Some(with_type),
+        Pat::Ident(ident) => {
+            if ident.type_ann.is_none() {
+                ident.type_ann = Some(with_type)
+            }
+        }
         Pat::Array(_) => todo!(),
         Pat::Rest(_) => todo!(),
         Pat::Object(_) => todo!(),
@@ -169,7 +173,7 @@ fn update_program(program: &Program, cm: Lrc<SourceMap>) -> String {
 
 fn create_lexer(file: &SourceFile) -> Lexer<StringInput> {
     Lexer::new(
-        Syntax::Es(Default::default()),
+        Syntax::Typescript(Default::default()),
         EsVersion::Es5,
         StringInput::from(&*file),
         None,
@@ -300,5 +304,10 @@ mod tests {
             "function foo(a = []) {}",
             "function foo(a: any[] = []) {}\n",
         );
+    }
+
+    #[test]
+    fn add_types_preexisting_type() {
+        compare("let x: number = 5;", "let x: number = 5;\n");
     }
 }
