@@ -2,8 +2,8 @@ use log::{error, info};
 use swc_common::sync::Lrc;
 use swc_common::{SourceFile, SourceMap, Span};
 use swc_ecma_ast::{
-    Decl, EsVersion, FnDecl, ModuleItem, Param, Pat, Program, Stmt, TsKeywordType,
-    TsKeywordTypeKind, TsType, TsTypeAnn, VarDecl, TsArrayType,
+    Decl, EsVersion, Expr, FnDecl, ModuleItem, Param, Pat, Program, Stmt, TsArrayType,
+    TsKeywordType, TsKeywordTypeKind, TsType, TsTypeAnn, VarDecl,
 };
 use swc_ecma_codegen::{
     text_writer::{JsWriter, WriteJs},
@@ -102,7 +102,11 @@ fn update_function_declaration(declaration: &mut FnDecl) {
 fn update_variable_declaration(declaration: &mut VarDecl) {
     for declarator in &mut declaration.decls {
         info!("var_declarator: {declarator:?}");
-        update_pat(&mut declarator.name, None)
+        let type_ann = match declarator.init.clone() {
+            Some(ref mut initializer) => Some(get_type_from_expression(&mut *initializer)),
+            None => todo!(),
+        };
+        update_pat(&mut declarator.name, type_ann)
     }
 }
 
@@ -114,26 +118,24 @@ fn update_pat(pat: &mut Pat, with_type: Option<TsTypeAnn>) {
     let with_type = with_type.unwrap_or(create_any_type());
     info!("pat: {pat:?}");
     match pat {
-        Pat::Ident(ident) => {
-            ident.type_ann = Some(with_type)
-        }
+        Pat::Ident(ident) => ident.type_ann = Some(with_type),
         Pat::Array(_) => todo!(),
         Pat::Rest(_) => todo!(),
         Pat::Object(_) => todo!(),
         Pat::Assign(assign) => {
-            let type_annotation = match *assign.right {
-                swc_ecma_ast::Expr::Array(ref array) => create_array(create_any_type()),
-                swc_ecma_ast::Expr::Lit(_) => todo!(),
-                _ => create_any_type()
-            };
-            
-            info!("\npat assign type_ann: {type_annotation:?}");
+            let type_annotation = get_type_from_expression(&mut *assign.right);
             update_pat(&mut assign.left, Some(type_annotation));
-
-            info!("\npat assign after: {assign:?}");
         }
         Pat::Invalid(_) => todo!(),
         Pat::Expr(_) => todo!(),
+    }
+}
+
+fn get_type_from_expression(expr: &mut Expr) -> TsTypeAnn {
+    match expr {
+        Expr::Array(ref array) => create_array(create_any_type()),
+        //Expr::Lit(_) => todo!(),
+        _ => create_any_type(),
     }
 }
 
@@ -187,12 +189,12 @@ fn create_any_type() -> TsTypeAnn {
 fn create_array(bound: TsTypeAnn) -> TsTypeAnn {
     let array_keyword = TsArrayType {
         span: Span::default(),
-        elem_type: bound.type_ann
+        elem_type: bound.type_ann,
     };
 
     TsTypeAnn {
         span: Span::default(),
-        type_ann: Box::new(TsType::TsArrayType(array_keyword))
+        type_ann: Box::new(TsType::TsArrayType(array_keyword)),
     }
 }
 
@@ -203,6 +205,10 @@ mod tests {
     use super::*;
 
     fn compare(input: &str, output: &str) {
+        // env_logger::init_from_env(
+        //     env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"),
+        // );
+
         let cm: Lrc<SourceMap> = Default::default();
         let file = cm.new_source_file(FileName::Custom("test.js".into()), input.into());
 
@@ -288,6 +294,9 @@ mod tests {
 
     #[test]
     fn add_types_array_function_default_value() {
-        compare("function foo(a = []) {}", "function foo(a: any[] = []) {}\n");
+        compare(
+            "function foo(a = []) {}",
+            "function foo(a: any[] = []) {}\n",
+        );
     }
 }
