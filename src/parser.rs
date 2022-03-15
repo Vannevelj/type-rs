@@ -1,7 +1,8 @@
-use log::error;
-use swc_common::{SourceFile, Span};
+use log::{error, info};
+use swc_common::sync::Lrc;
+use swc_common::{SourceFile, SourceMap, Span};
 use swc_ecma_ast::{
-    Decl, EsVersion, FnDecl, Module, ModuleItem, Param, Pat, Stmt, TsKeywordType,
+    Decl, EsVersion, FnDecl, Module, ModuleItem, Param, Pat, Program, Script, Stmt, TsKeywordType,
     TsKeywordTypeKind, TsType, TsTypeAnn,
 };
 use swc_ecma_codegen::{
@@ -10,28 +11,49 @@ use swc_ecma_codegen::{
 };
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax};
 
-pub fn parse(file: &SourceFile) -> Module {
+pub fn parse(file: &SourceFile) -> Program {
     let lexer = create_lexer(file);
     let mut parser = Parser::new_from(lexer);
     parser
-        .parse_module()
+        .parse_program()
         .map_err(|e| {
             error!("Error: {e:?}");
         })
         .expect("failed to parse module")
 }
 
-pub fn add_types(module: &mut Module) -> String {
-    for module_item in &mut module.body {
-        match module_item {
-            ModuleItem::Stmt(Stmt::Decl(Decl::Fn(ref mut function))) => {
+pub fn add_types(module: &mut Program, cm: Lrc<SourceMap>) -> String {
+    fn handle_statement(stmt: &mut Stmt) {
+        match stmt {
+            Stmt::Decl(Decl::Fn(ref mut function)) => {
+                println!("Updating function declaration as script");
                 update_function_declaration(function)
             }
-            _ => println!("not a statement"),
+            _ => error!("not a statement"),
         }
     }
 
-    update_module(module)
+    match module {
+        Program::Module(module) => {
+            for module_item in &mut module.body {
+                info!("Found module item: {module_item:?}");
+                match module_item {
+                    ModuleItem::Stmt(stmt) => {
+                        handle_statement(stmt);
+                    }
+                    _ => error!("not a statement"),
+                }
+            }
+        }
+        Program::Script(script) => {
+            for statement in &mut script.body {
+                info!("Found statement: {statement:?}");
+                handle_statement(statement);
+            }
+        }
+    }
+    
+    update_program(module, cm)
 }
 
 fn update_function_declaration(declaration: &mut FnDecl) {
@@ -63,9 +85,8 @@ fn update_pat(pat: &mut Pat) {
     }
 }
 
-fn update_module(module: &Module) -> String {
+fn update_program(program: &Program, cm: Lrc<SourceMap>) -> String {
     let mut buf = vec![];
-    let cm: swc_common::sync::Lrc<swc_common::SourceMap> = Default::default();
     {
         let wr = Box::new(JsWriter::with_target(
             cm.clone(),
@@ -82,7 +103,7 @@ fn update_module(module: &Module) -> String {
             wr,
         };
 
-        emitter.emit_module(module).expect("Failed to emit module");
+        emitter.emit_program(program).expect("Failed to emit program");
     }
 
     String::from_utf8(buf).expect("invalid utf8 character detected")
@@ -99,8 +120,7 @@ fn create_lexer(file: &SourceFile) -> Lexer<StringInput> {
 
 #[cfg(test)]
 mod tests {
-    use swc_common::sync::Lrc;
-    use swc_common::{FileName, SourceMap};
+    use swc_common::FileName;
 
     use super::*;
 
@@ -109,7 +129,7 @@ mod tests {
         let file = cm.new_source_file(FileName::Custom("test.js".into()), input.into());
 
         let mut module = parse(&file);
-        let result = add_types(&mut module);
+        let result = add_types(&mut module, cm);
 
         assert_eq!(output, result);
     }
@@ -117,6 +137,23 @@ mod tests {
     #[test]
     fn add_types_function() {
         compare("function foo(a) {}", "function foo(a: any) {}\n");
+        compare(
+            "function foo(a, b, c) {}",
+            "function foo(a: any, b: any, c: any) {}\n",
+        );
+    }
+
+    #[test]
+    fn add_types_variable() {
+        //compare("let x = 5;", "let x: number = 5;\n");
+        // compare("const x = 5;", "const x: number = 5;\n");
+        // compare("var x = 5;", "var x: number = 5;\n");
+        compare(
+            "function foo() { let x = 5; }",
+            "function foo() { 
+    let x: number = 5; 
+}\n",
+        );
     }
 
     #[test]
