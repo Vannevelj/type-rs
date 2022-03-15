@@ -83,7 +83,9 @@ fn handle_statement(stmt: &mut Stmt) {
         Stmt::For(_) => todo!(),
         Stmt::ForIn(_) => todo!(),
         Stmt::ForOf(_) => todo!(),
-        Stmt::Expr(_) => todo!(),
+        Stmt::Expr(e) => {
+            info!("\nexprstmt: {e:?}");
+        }
     }
 }
 
