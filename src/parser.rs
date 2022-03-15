@@ -84,7 +84,7 @@ fn update_function_declaration(declaration: &mut FnDecl) {
 
 fn update_variable_declaration(declaration: &mut VarDecl) {
     for var_declaration in &mut declaration.decls {
-        println!("var_declarator: {var_declaration:?}");
+        info!("var_declarator: {var_declaration:?}");
         update_pat(&mut var_declaration.name)
     }
 }
