@@ -3,7 +3,7 @@ use swc_common::sync::Lrc;
 use swc_common::{SourceFile, SourceMap, Span};
 use swc_ecma_ast::{
     Decl, EsVersion, FnDecl, ModuleItem, Param, Pat, Program, Stmt, TsKeywordType,
-    TsKeywordTypeKind, TsType, TsTypeAnn, VarDecl,
+    TsKeywordTypeKind, TsType, TsTypeAnn, VarDecl, TsArrayType,
 };
 use swc_ecma_codegen::{
     text_writer::{JsWriter, WriteJs},
@@ -102,33 +102,36 @@ fn update_function_declaration(declaration: &mut FnDecl) {
 fn update_variable_declaration(declaration: &mut VarDecl) {
     for declarator in &mut declaration.decls {
         info!("var_declarator: {declarator:?}");
-        update_pat(&mut declarator.name)
+        update_pat(&mut declarator.name, None)
     }
 }
 
 fn update_param(param: &mut Param) {
-    update_pat(&mut param.pat);
+    update_pat(&mut param.pat, None);
 }
 
-fn update_pat(pat: &mut Pat) {
+fn update_pat(pat: &mut Pat, with_type: Option<TsTypeAnn>) {
+    let with_type = with_type.unwrap_or(create_any_type());
+    info!("pat: {pat:?}");
     match pat {
         Pat::Ident(ident) => {
-            let any_keyword = TsKeywordType {
-                span: Span::default(),
-                kind: TsKeywordTypeKind::TsAnyKeyword,
-            };
-
-            let type_annotation: TsTypeAnn = TsTypeAnn {
-                span: Span::default(),
-                type_ann: Box::new(TsType::TsKeywordType(any_keyword)),
-            };
-
-            ident.type_ann = Some(type_annotation);
+            ident.type_ann = Some(with_type)
         }
         Pat::Array(_) => todo!(),
         Pat::Rest(_) => todo!(),
         Pat::Object(_) => todo!(),
-        Pat::Assign(_) => todo!(),
+        Pat::Assign(assign) => {
+            let type_annotation = match *assign.right {
+                swc_ecma_ast::Expr::Array(ref array) => create_array(create_any_type()),
+                swc_ecma_ast::Expr::Lit(_) => todo!(),
+                _ => create_any_type()
+            };
+            
+            info!("\npat assign type_ann: {type_annotation:?}");
+            update_pat(&mut assign.left, Some(type_annotation));
+
+            info!("\npat assign after: {assign:?}");
+        }
         Pat::Invalid(_) => todo!(),
         Pat::Expr(_) => todo!(),
     }
@@ -169,6 +172,30 @@ fn create_lexer(file: &SourceFile) -> Lexer<StringInput> {
     )
 }
 
+fn create_any_type() -> TsTypeAnn {
+    let any_keyword = TsKeywordType {
+        span: Span::default(),
+        kind: TsKeywordTypeKind::TsAnyKeyword,
+    };
+
+    TsTypeAnn {
+        span: Span::default(),
+        type_ann: Box::new(TsType::TsKeywordType(any_keyword)),
+    }
+}
+
+fn create_array(bound: TsTypeAnn) -> TsTypeAnn {
+    let array_keyword = TsArrayType {
+        span: Span::default(),
+        elem_type: bound.type_ann
+    };
+
+    TsTypeAnn {
+        span: Span::default(),
+        type_ann: Box::new(TsType::TsArrayType(array_keyword))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use swc_common::FileName;
@@ -191,11 +218,21 @@ mod tests {
     }
 
     #[test]
+    fn add_types_function_default_value() {
+        compare("function foo(a = 5) {}", "function foo(a: any = 5) {}\n");
+    }
+
+    #[test]
     fn add_types_function_multi_param() {
         compare(
             "function foo(a, b, c) {}",
             "function foo(a: any, b: any, c: any) {}\n",
         );
+    }
+
+    #[test]
+    fn add_types_variable_no_initializer() {
+        compare("let x;", "let x: any;\n");
     }
 
     #[test]
@@ -242,5 +279,15 @@ mod tests {
     console.log(test);
 }\n",
         );
+    }
+
+    #[test]
+    fn add_types_array() {
+        compare("const x = [];", "const x: any[] = [];\n");
+    }
+
+    #[test]
+    fn add_types_array_function_default_value() {
+        compare("function foo(a = []) {}", "function foo(a: any[] = []) {}\n");
     }
 }
