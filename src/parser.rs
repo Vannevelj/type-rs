@@ -31,7 +31,7 @@ pub fn add_types(program: &mut Program, cm: Lrc<SourceMap>) -> String {
                     ModuleItem::Stmt(stmt) => {
                         handle_statement(stmt);
                     }
-                    _ => error!("not a statement"),
+                    ModuleItem::ModuleDecl(_) => todo!(),
                 }
             }
         }
@@ -66,7 +66,24 @@ fn handle_statement(stmt: &mut Stmt) {
                 Decl::TsModule(_) => todo!(),
             }
         }
-        _ => error!("not a statement"),
+        Stmt::Block(_) => todo!(),
+        Stmt::Empty(_) => todo!(),
+        Stmt::Debugger(_) => todo!(),
+        Stmt::With(_) => todo!(),
+        Stmt::Return(_) => todo!(),
+        Stmt::Labeled(_) => todo!(),
+        Stmt::Break(_) => todo!(),
+        Stmt::Continue(_) => todo!(),
+        Stmt::If(_) => todo!(),
+        Stmt::Switch(_) => todo!(),
+        Stmt::Throw(_) => todo!(),
+        Stmt::Try(_) => todo!(),
+        Stmt::While(_) => todo!(),
+        Stmt::DoWhile(_) => todo!(),
+        Stmt::For(_) => todo!(),
+        Stmt::ForIn(_) => todo!(),
+        Stmt::ForOf(_) => todo!(),
+        Stmt::Expr(_) => todo!(),
     }
 }
 
@@ -83,9 +100,9 @@ fn update_function_declaration(declaration: &mut FnDecl) {
 }
 
 fn update_variable_declaration(declaration: &mut VarDecl) {
-    for var_declaration in &mut declaration.decls {
-        info!("var_declarator: {var_declaration:?}");
-        update_pat(&mut var_declaration.name)
+    for declarator in &mut declaration.decls {
+        info!("var_declarator: {declarator:?}");
+        update_pat(&mut declarator.name)
     }
 }
 
@@ -108,7 +125,12 @@ fn update_pat(pat: &mut Pat) {
 
             ident.type_ann = Some(type_annotation);
         }
-        _ => todo!(),
+        Pat::Array(_) => todo!(),
+        Pat::Rest(_) => todo!(),
+        Pat::Object(_) => todo!(),
+        Pat::Assign(_) => todo!(),
+        Pat::Invalid(_) => todo!(),
+        Pat::Expr(_) => todo!(),
     }
 }
 
