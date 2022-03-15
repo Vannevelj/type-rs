@@ -104,7 +104,7 @@ fn update_variable_declaration(declaration: &mut VarDecl) {
         info!("var_declarator: {declarator:?}");
         let type_ann = match declarator.init.clone() {
             Some(ref mut initializer) => Some(get_type_from_expression(&mut *initializer)),
-            None => todo!(),
+            None => None,
         };
         update_pat(&mut declarator.name, type_ann)
     }
