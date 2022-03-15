@@ -2,8 +2,8 @@ use log::{error, info};
 use swc_common::sync::Lrc;
 use swc_common::{SourceFile, SourceMap, Span};
 use swc_ecma_ast::{
-    Decl, EsVersion, FnDecl, Module, ModuleItem, Param, Pat, Program, Script, Stmt, TsKeywordType,
-    TsKeywordTypeKind, TsType, TsTypeAnn,
+    Decl, EsVersion, FnDecl, ModuleItem, Param, Pat, Program, Stmt, TsKeywordType,
+    TsKeywordTypeKind, TsType, TsTypeAnn, VarDecl,
 };
 use swc_ecma_codegen::{
     text_writer::{JsWriter, WriteJs},
@@ -22,21 +22,11 @@ pub fn parse(file: &SourceFile) -> Program {
         .expect("failed to parse module")
 }
 
-pub fn add_types(module: &mut Program, cm: Lrc<SourceMap>) -> String {
-    fn handle_statement(stmt: &mut Stmt) {
-        match stmt {
-            Stmt::Decl(Decl::Fn(ref mut function)) => {
-                println!("Updating function declaration as script");
-                update_function_declaration(function)
-            }
-            _ => error!("not a statement"),
-        }
-    }
-
-    match module {
+pub fn add_types(program: &mut Program, cm: Lrc<SourceMap>) -> String {
+    match program {
         Program::Module(module) => {
             for module_item in &mut module.body {
-                info!("Found module item: {module_item:?}");
+                info!("\nFound module item: {module_item:?}");
                 match module_item {
                     ModuleItem::Stmt(stmt) => {
                         handle_statement(stmt);
@@ -46,19 +36,56 @@ pub fn add_types(module: &mut Program, cm: Lrc<SourceMap>) -> String {
             }
         }
         Program::Script(script) => {
+            info!("\nscript: {script:?}");
             for statement in &mut script.body {
-                info!("Found statement: {statement:?}");
+                info!("\nFound statement: {statement:?}");
                 handle_statement(statement);
             }
         }
     }
-    
-    update_program(module, cm)
+
+    update_program(program, cm)
+}
+
+fn handle_statement(stmt: &mut Stmt) {
+    info!("\nstmt: {stmt:?}");
+
+    match stmt {
+        Stmt::Decl(declaration) => {
+            info!("\ndeclaration: {declaration:?}");
+            match declaration {
+                Decl::Class(_) => todo!(),
+                Decl::Fn(ref mut function) => update_function_declaration(function),
+                Decl::Var(ref mut variable) => {
+                    info!("\nvar declr");
+                    update_variable_declaration(variable)
+                }
+                Decl::TsInterface(_) => todo!(),
+                Decl::TsTypeAlias(_) => todo!(),
+                Decl::TsEnum(_) => todo!(),
+                Decl::TsModule(_) => todo!(),
+            }
+        }
+        _ => error!("not a statement"),
+    }
 }
 
 fn update_function_declaration(declaration: &mut FnDecl) {
     for param in &mut declaration.function.params {
         update_param(param);
+    }
+
+    if let Some(body) = &mut declaration.function.body {
+        for stmt in &mut body.stmts {
+            handle_statement(stmt);
+        }
+    }
+}
+
+fn update_variable_declaration(declaration: &mut VarDecl) {
+    for var_declaration in &mut declaration.decls {
+        println!("var_declarator: {var_declaration:?}");
+        update_pat(&mut var_declaration.name)
     }
 }
 
@@ -103,7 +130,9 @@ fn update_program(program: &Program, cm: Lrc<SourceMap>) -> String {
             wr,
         };
 
-        emitter.emit_program(program).expect("Failed to emit program");
+        emitter
+            .emit_program(program)
+            .expect("Failed to emit program");
     }
 
     String::from_utf8(buf).expect("invalid utf8 character detected")
@@ -125,6 +154,10 @@ mod tests {
     use super::*;
 
     fn compare(input: &str, output: &str) {
+        env_logger::init_from_env(
+            env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"),
+        );
+
         let cm: Lrc<SourceMap> = Default::default();
         let file = cm.new_source_file(FileName::Custom("test.js".into()), input.into());
 
@@ -137,6 +170,10 @@ mod tests {
     #[test]
     fn add_types_function() {
         compare("function foo(a) {}", "function foo(a: any) {}\n");
+    }
+
+    #[test]
+    fn add_types_function_multi_param() {
         compare(
             "function foo(a, b, c) {}",
             "function foo(a: any, b: any, c: any) {}\n",
@@ -144,14 +181,31 @@ mod tests {
     }
 
     #[test]
-    fn add_types_variable() {
-        //compare("let x = 5;", "let x: number = 5;\n");
-        // compare("const x = 5;", "const x: number = 5;\n");
-        // compare("var x = 5;", "var x: number = 5;\n");
+    fn add_types_variable_let() {
+        compare("let x = 5;", "let x: any = 5;\n");
+    }
+
+    #[test]
+    fn add_types_variable_const() {
+        compare("const x = 5;", "const x: any = 5;\n");
+    }
+
+    #[test]
+    fn add_types_variable_var() {
+        compare("var x = 5;", "var x: any = 5;\n");
+    }
+
+    #[test]
+    fn add_types_variable_multi() {
+        compare("let x = 5, y = 6;", "let x: any = 5, y: any = 6;\n");
+    }
+
+    #[test]
+    fn add_types_variable_in_function() {
         compare(
             "function foo() { let x = 5; }",
-            "function foo() { 
-    let x: number = 5; 
+            "function foo() {
+    let x: any = 5;
 }\n",
         );
     }
