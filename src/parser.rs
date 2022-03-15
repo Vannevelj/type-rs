@@ -154,10 +154,6 @@ mod tests {
     use super::*;
 
     fn compare(input: &str, output: &str) {
-        env_logger::init_from_env(
-            env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"),
-        );
-
         let cm: Lrc<SourceMap> = Default::default();
         let file = cm.new_source_file(FileName::Custom("test.js".into()), input.into());
 
