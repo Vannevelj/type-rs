@@ -192,10 +192,10 @@ fn create_any_type() -> TsTypeAnn {
     }
 }
 
-fn create_array(bound: TsTypeAnn) -> TsTypeAnn {
+fn create_array(element_type: TsTypeAnn) -> TsTypeAnn {
     let array_keyword = TsArrayType {
         span: Span::default(),
-        elem_type: bound.type_ann,
+        elem_type: element_type.type_ann,
     };
 
     TsTypeAnn {
