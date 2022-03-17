@@ -11,7 +11,7 @@ use swc_ecma_codegen::{
 };
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax};
 
-pub fn parse(file: &SourceFile) -> Program {
+pub fn parse(file: &SourceFile) -> Result<Program, ()> {
     let lexer = create_lexer(file);
     let mut parser = Parser::new_from(lexer);
     parser
@@ -19,7 +19,6 @@ pub fn parse(file: &SourceFile) -> Program {
         .map_err(|e| {
             error!("Error: {e:?}");
         })
-        .expect("failed to parse module")
 }
 
 pub fn add_types(program: &mut Program, cm: Lrc<SourceMap>) -> String {
