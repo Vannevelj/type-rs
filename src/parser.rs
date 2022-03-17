@@ -217,7 +217,7 @@ mod tests {
         let cm: Lrc<SourceMap> = Default::default();
         let file = cm.new_source_file(FileName::Custom("test.js".into()), input.into());
 
-        let mut module = parse(&file);
+        let mut module = parse(&file).unwrap();
         let actual_output = add_types(&mut module, cm);
 
         assert_eq!(format!("{expected_output}\n"), actual_output);
