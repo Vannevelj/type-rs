@@ -31,7 +31,7 @@ pub fn add_types(program: &mut Program, cm: Lrc<SourceMap>) -> String {
                     ModuleItem::Stmt(stmt) => {
                         handle_statement(stmt);
                     }
-                    ModuleItem::ModuleDecl(_) => todo!(),
+                    ModuleItem::ModuleDecl(_) => (),
                 }
             }
         }
@@ -54,35 +54,35 @@ fn handle_statement(stmt: &mut Stmt) {
         Stmt::Decl(declaration) => {
             info!("\ndeclaration: {declaration:?}");
             match declaration {
-                Decl::Class(_) => todo!(),
+                Decl::Class(_) => (),
                 Decl::Fn(ref mut function) => update_function_declaration(function),
                 Decl::Var(ref mut variable) => {
                     info!("\nvar declr");
                     update_variable_declaration(variable)
                 }
-                Decl::TsInterface(_) => todo!(),
-                Decl::TsTypeAlias(_) => todo!(),
-                Decl::TsEnum(_) => todo!(),
-                Decl::TsModule(_) => todo!(),
+                Decl::TsInterface(_) => (),
+                Decl::TsTypeAlias(_) => (),
+                Decl::TsEnum(_) => (),
+                Decl::TsModule(_) => (),
             }
         }
-        Stmt::Block(_) => todo!(),
-        Stmt::Empty(_) => todo!(),
-        Stmt::Debugger(_) => todo!(),
-        Stmt::With(_) => todo!(),
-        Stmt::Return(_) => todo!(),
-        Stmt::Labeled(_) => todo!(),
-        Stmt::Break(_) => todo!(),
-        Stmt::Continue(_) => todo!(),
-        Stmt::If(_) => todo!(),
-        Stmt::Switch(_) => todo!(),
-        Stmt::Throw(_) => todo!(),
-        Stmt::Try(_) => todo!(),
-        Stmt::While(_) => todo!(),
-        Stmt::DoWhile(_) => todo!(),
-        Stmt::For(_) => todo!(),
-        Stmt::ForIn(_) => todo!(),
-        Stmt::ForOf(_) => todo!(),
+        Stmt::Block(_) => (),
+        Stmt::Empty(_) => (),
+        Stmt::Debugger(_) => (),
+        Stmt::With(_) => (),
+        Stmt::Return(_) => (),
+        Stmt::Labeled(_) => (),
+        Stmt::Break(_) => (),
+        Stmt::Continue(_) => (),
+        Stmt::If(_) => (),
+        Stmt::Switch(_) => (),
+        Stmt::Throw(_) => (),
+        Stmt::Try(_) => (),
+        Stmt::While(_) => (),
+        Stmt::DoWhile(_) => (),
+        Stmt::For(_) => (),
+        Stmt::ForIn(_) => (),
+        Stmt::ForOf(_) => (),
         Stmt::Expr(e) => {
             info!("\nexprstmt: {e:?}");
         }
@@ -117,7 +117,7 @@ fn update_param(param: &mut Param) {
 }
 
 fn update_pat(pat: &mut Pat, with_type: Option<TsTypeAnn>) {
-    let with_type = with_type.unwrap_or(create_any_type());
+    let with_type = with_type.unwrap_or_else(create_any_type);
     info!("pat: {pat:?}");
     match pat {
         Pat::Ident(ident) => {
@@ -125,22 +125,22 @@ fn update_pat(pat: &mut Pat, with_type: Option<TsTypeAnn>) {
                 ident.type_ann = Some(with_type)
             }
         }
-        Pat::Array(_) => todo!(),
-        Pat::Rest(_) => todo!(),
-        Pat::Object(_) => todo!(),
+        Pat::Array(_) => (),
+        Pat::Rest(_) => (),
+        Pat::Object(_) => (),
         Pat::Assign(assign) => {
             let type_annotation = get_type_from_expression(&mut *assign.right);
             update_pat(&mut assign.left, Some(type_annotation));
         }
-        Pat::Invalid(_) => todo!(),
-        Pat::Expr(_) => todo!(),
+        Pat::Invalid(_) => (),
+        Pat::Expr(_) => (),
     }
 }
 
 fn get_type_from_expression(expr: &mut Expr) -> TsTypeAnn {
     match expr {
         Expr::Array(ref array) => create_array(create_any_type()),
-        //Expr::Lit(_) => todo!(),
+        //Expr::Lit(_) => (),
         _ => create_any_type(),
     }
 }
