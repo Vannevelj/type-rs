@@ -104,10 +104,10 @@ fn update_function_declaration(declaration: &mut FnDecl) {
 fn update_variable_declaration(declaration: &mut VarDecl) {
     for declarator in &mut declaration.decls {
         info!("var_declarator: {declarator:?}");
-        let type_ann = match declarator.init {
-            Some(ref mut initializer) => Some(get_type_from_expression(&mut *initializer)),
-            None => None,
-        };
+        let type_ann = declarator
+            .init
+            .as_mut()
+            .map(|initializer| get_type_from_expression(&mut *initializer));
         update_pat(&mut declarator.name, type_ann)
     }
 }

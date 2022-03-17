@@ -1,7 +1,7 @@
 mod parser;
 
+use std::fs;
 use std::path::Path;
-use std::{fs, path::PathBuf};
 
 use log::{debug, error, info, warn};
 use swc_common::sync::Lrc;
@@ -60,9 +60,7 @@ fn traverse_directories(path: &Path) {
     }
 
     debug!("Diving into new directory: {:?}", path);
-    for entry in fs::read_dir(path).unwrap() {
-        if let Ok(directory) = entry {
-            traverse_directories(&directory.path());
-        }
+    for directory in fs::read_dir(path).unwrap().flatten() {
+        traverse_directories(&directory.path());
     }
 }
