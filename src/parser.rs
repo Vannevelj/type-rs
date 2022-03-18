@@ -1,6 +1,7 @@
 extern crate swc_common;
 extern crate swc_ecma_parser;
-use log::{error, info, trace};
+use log::{error, info, trace, debug};
+use swc::{SwcComments, Compiler};
 use swc_common::collections::AHashMap;
 use swc_common::errors::ColorConfig;
 use swc_common::sync::Lrc;
@@ -11,8 +12,7 @@ use swc_ecma_ast::{
 };
 use swc_ecma_parser::{EsConfig, Syntax};
 
-pub fn parse(file: Lrc<SourceFile>, cm: &Lrc<SourceMap>) -> Result<Program, ()> {
-    let compiler = swc::Compiler::new(cm.clone());
+pub fn parse(file: Lrc<SourceFile>, cm: &Lrc<SourceMap>, compiler: &Compiler) -> Result<Program, ()> {
     let handler = Handler::with_tty_emitter(ColorConfig::Auto, true, false, Some(cm.clone()));
 
     let config = EsConfig {
@@ -22,23 +22,28 @@ pub fn parse(file: Lrc<SourceFile>, cm: &Lrc<SourceMap>) -> Result<Program, ()> 
         ..Default::default()
     };
 
+    let comments: SwcComments = Default::default();
+
     compiler
         .parse_js(
             file,
             &handler,
             EsVersion::Es2022,
             Syntax::Es(config),
-            swc::config::IsModule::Bool(true),
-            None,
+            swc::config::IsModule::Unknown,
+            Some(&comments),
         )
         .map_err(|_err| ())
 }
 
-pub fn add_types(program: &mut Program, cm: Lrc<SourceMap>) -> String {
+pub fn add_types(program: &mut Program, compiler: &Compiler) -> String {
+    let comments = &compiler.comments().leading;
+    info!("Comments before add_types: {comments:?}");
     match program {
         Program::Module(module) => {
+            info!("\nmodule: {module:?}");
             for module_item in &mut module.body {
-                trace!("\nFound module item: {module_item:?}");
+                info!("\nFound module item: {module_item:?}");
                 match module_item {
                     ModuleItem::Stmt(stmt) => {
                         handle_statement(stmt);
@@ -48,28 +53,31 @@ pub fn add_types(program: &mut Program, cm: Lrc<SourceMap>) -> String {
             }
         }
         Program::Script(script) => {
-            trace!("\nscript: {script:?}");
+            info!("\nscript: {script:?}");
             for statement in &mut script.body {
-                trace!("\nFound statement: {statement:?}");
+                info!("\nFound statement: {statement:?}");
                 handle_statement(statement);
             }
         }
     }
 
-    update_program(program, cm)
+    let comments = &compiler.comments().leading;
+    info!("Comments after add_types: {comments:?}");
+
+    update_program(program, &compiler)
 }
 
 fn handle_statement(stmt: &mut Stmt) {
-    trace!("\nstmt: {stmt:?}");
+    info!("\nstmt: {stmt:?}");
 
     match stmt {
         Stmt::Decl(declaration) => {
-            trace!("\ndeclaration: {declaration:?}");
+            info!("\ndeclaration: {declaration:?}");
             match declaration {
                 Decl::Class(_) => (),
                 Decl::Fn(ref mut function) => update_function_declaration(function),
                 Decl::Var(ref mut variable) => {
-                    trace!("\nvar declr");
+                    info!("\nvar declr");
                     update_variable_declaration(variable)
                 }
                 Decl::TsInterface(_) => (),
@@ -96,7 +104,7 @@ fn handle_statement(stmt: &mut Stmt) {
         Stmt::ForIn(_) => (),
         Stmt::ForOf(_) => (),
         Stmt::Expr(e) => {
-            trace!("\nexprstmt: {e:?}");
+            info!("\nexprstmt: {e:?}");
         }
     }
 }
@@ -115,7 +123,7 @@ fn update_function_declaration(declaration: &mut FnDecl) {
 
 fn update_variable_declaration(declaration: &mut VarDecl) {
     for declarator in &mut declaration.decls {
-        trace!("var_declarator: {declarator:?}");
+        info!("var_declarator: {declarator:?}");
         let type_ann = declarator
             .init
             .as_mut()
@@ -130,7 +138,7 @@ fn update_param(param: &mut Param) {
 
 fn update_pat(pat: &mut Pat, with_type: Option<TsTypeAnn>) {
     let with_type = with_type.unwrap_or_else(create_any_type);
-    trace!("pat: {pat:?}");
+    info!("pat: {pat:?}");
     match pat {
         Pat::Ident(ident) => {
             if ident.type_ann.is_none() {
@@ -157,9 +165,11 @@ fn get_type_from_expression(expr: &mut Expr) -> TsTypeAnn {
     }
 }
 
-fn update_program(program: &Program, cm: Lrc<SourceMap>) -> String {
-    let c = swc::Compiler::new(cm.clone());
-    let printed_code = c
+fn update_program(program: &Program, compiler: &Compiler) -> String {
+    let comments = &compiler.comments().leading;
+    info!("Comments before printing: {comments:?}");
+    info!("Program: {program:?}");
+    let printed_code = compiler
         .print(
             program,
             None,
@@ -170,7 +180,7 @@ fn update_program(program: &Program, cm: Lrc<SourceMap>) -> String {
             &AHashMap::default(),
             None,
             false,
-            None,
+            Some(compiler.comments()),
         )
         .expect("Failed to print");
     printed_code.code
@@ -207,15 +217,16 @@ mod tests {
     use super::*;
 
     fn compare(input: &str, expected_output: &str) {
-        // env_logger::init_from_env(
-        //     env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"),
-        // );
+        env_logger::init_from_env(
+            env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "trace"),
+        );
 
         let cm: Lrc<SourceMap> = Default::default();
         let file = cm.new_source_file(FileName::Custom("test.js".into()), input.into());
 
-        let mut module = parse(file, &cm).unwrap();
-        let actual_output = add_types(&mut module, cm);
+        let compiler = Compiler::new(cm.clone());
+        let mut module = parse(file, &cm, &compiler).unwrap();
+        let actual_output = add_types(&mut module, &compiler);
 
         assert_eq!(format!("{expected_output}\n"), actual_output);
     }
@@ -302,5 +313,10 @@ mod tests {
     #[test]
     fn add_types_preexisting_type() {
         compare("let x: number = 5;", "let x: number = 5;");
+    }
+
+    #[test]
+    fn add_types_preserves_comments() {
+        compare("// hello", "// hello");
     }
 }
