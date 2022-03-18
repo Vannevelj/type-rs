@@ -45,7 +45,7 @@ fn traverse_directories(path: &Path) {
 
             return match cm.load_file(path) {
                 Ok(source_file) => {
-                    let program = parse(&source_file);
+                    let program = parse(source_file, &cm);
                     if program.is_err() {
                         error!("Unable to parse file: {file_name}");
                         return;
@@ -53,8 +53,8 @@ fn traverse_directories(path: &Path) {
                     let new_source = add_types(&mut program.unwrap(), cm);
                     let new_path = path.with_file_name(format!("{file_name}.{target_extension}"));
                     info!("Writing new file at {new_path:?}");
-                    fs::write(new_path, new_source).expect("Unable to write file");
-                    fs::remove_file(path).expect("Failed to delete file");
+                    fs::write(path, new_source).expect("Unable to write file");
+                    // fs::remove_file(path).expect("Failed to delete file");
                 }
                 Err(_) => {
                     error!("Unable to load file: {file_name}");

@@ -1,31 +1,44 @@
-use log::{error, info};
+extern crate swc_common;
+extern crate swc_ecma_parser;
+use log::{error, info, trace};
+use swc_common::collections::AHashMap;
+use swc_common::errors::ColorConfig;
 use swc_common::sync::Lrc;
-use swc_common::{SourceFile, SourceMap, Span};
+use swc_common::{errors::Handler, SourceFile, SourceMap, Span};
 use swc_ecma_ast::{
     Decl, EsVersion, Expr, FnDecl, ModuleItem, Param, Pat, Program, Stmt, TsArrayType,
     TsKeywordType, TsKeywordTypeKind, TsType, TsTypeAnn, VarDecl,
 };
-use swc_ecma_codegen::{
-    text_writer::{JsWriter, WriteJs},
-    Config, Emitter,
-};
-use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax};
+use swc_ecma_parser::{EsConfig, Syntax};
 
-pub fn parse(file: &SourceFile) -> Result<Program, ()> {
-    let lexer = create_lexer(file);
-    let mut parser = Parser::new_from(lexer);
-    parser
-        .parse_program()
-        .map_err(|e| {
-            error!("Error: {e:?}");
-        })
+pub fn parse(file: Lrc<SourceFile>, cm: &Lrc<SourceMap>) -> Result<Program, ()> {
+    let compiler = swc::Compiler::new(cm.clone());
+    let handler = Handler::with_tty_emitter(ColorConfig::Auto, true, false, Some(cm.clone()));
+
+    let config = EsConfig {
+        jsx: true,
+        fn_bind: true,
+        import_assertions: true,
+        ..Default::default()
+    };
+
+    compiler
+        .parse_js(
+            file,
+            &handler,
+            EsVersion::Es2022,
+            Syntax::Es(config),
+            swc::config::IsModule::Bool(true),
+            None,
+        )
+        .map_err(|_err| ())
 }
 
 pub fn add_types(program: &mut Program, cm: Lrc<SourceMap>) -> String {
     match program {
         Program::Module(module) => {
             for module_item in &mut module.body {
-                info!("\nFound module item: {module_item:?}");
+                trace!("\nFound module item: {module_item:?}");
                 match module_item {
                     ModuleItem::Stmt(stmt) => {
                         handle_statement(stmt);
@@ -35,9 +48,9 @@ pub fn add_types(program: &mut Program, cm: Lrc<SourceMap>) -> String {
             }
         }
         Program::Script(script) => {
-            info!("\nscript: {script:?}");
+            trace!("\nscript: {script:?}");
             for statement in &mut script.body {
-                info!("\nFound statement: {statement:?}");
+                trace!("\nFound statement: {statement:?}");
                 handle_statement(statement);
             }
         }
@@ -47,16 +60,16 @@ pub fn add_types(program: &mut Program, cm: Lrc<SourceMap>) -> String {
 }
 
 fn handle_statement(stmt: &mut Stmt) {
-    info!("\nstmt: {stmt:?}");
+    trace!("\nstmt: {stmt:?}");
 
     match stmt {
         Stmt::Decl(declaration) => {
-            info!("\ndeclaration: {declaration:?}");
+            trace!("\ndeclaration: {declaration:?}");
             match declaration {
                 Decl::Class(_) => (),
                 Decl::Fn(ref mut function) => update_function_declaration(function),
                 Decl::Var(ref mut variable) => {
-                    info!("\nvar declr");
+                    trace!("\nvar declr");
                     update_variable_declaration(variable)
                 }
                 Decl::TsInterface(_) => (),
@@ -83,7 +96,7 @@ fn handle_statement(stmt: &mut Stmt) {
         Stmt::ForIn(_) => (),
         Stmt::ForOf(_) => (),
         Stmt::Expr(e) => {
-            info!("\nexprstmt: {e:?}");
+            trace!("\nexprstmt: {e:?}");
         }
     }
 }
@@ -102,7 +115,7 @@ fn update_function_declaration(declaration: &mut FnDecl) {
 
 fn update_variable_declaration(declaration: &mut VarDecl) {
     for declarator in &mut declaration.decls {
-        info!("var_declarator: {declarator:?}");
+        trace!("var_declarator: {declarator:?}");
         let type_ann = declarator
             .init
             .as_mut()
@@ -117,7 +130,7 @@ fn update_param(param: &mut Param) {
 
 fn update_pat(pat: &mut Pat, with_type: Option<TsTypeAnn>) {
     let with_type = with_type.unwrap_or_else(create_any_type);
-    info!("pat: {pat:?}");
+    trace!("pat: {pat:?}");
     match pat {
         Pat::Ident(ident) => {
             if ident.type_ann.is_none() {
@@ -145,38 +158,22 @@ fn get_type_from_expression(expr: &mut Expr) -> TsTypeAnn {
 }
 
 fn update_program(program: &Program, cm: Lrc<SourceMap>) -> String {
-    let mut buf = vec![];
-    {
-        let wr = Box::new(JsWriter::with_target(
-            cm.clone(),
-            "\n",
-            &mut buf,
+    let c = swc::Compiler::new(cm.clone());
+    let printed_code = c
+        .print(
+            program,
             None,
-            EsVersion::Es5,
-        )) as Box<dyn WriteJs>;
-
-        let mut emitter = Emitter {
-            cfg: Config { minify: false },
-            comments: None,
-            cm,
-            wr,
-        };
-
-        emitter
-            .emit_program(program)
-            .expect("Failed to emit program");
-    }
-
-    String::from_utf8(buf).expect("invalid utf8 character detected")
-}
-
-fn create_lexer(file: &SourceFile) -> Lexer<StringInput> {
-    Lexer::new(
-        Syntax::Typescript(Default::default()),
-        EsVersion::Es5,
-        StringInput::from(&*file),
-        None,
-    )
+            None,
+            false,
+            EsVersion::Es2022,
+            swc::config::SourceMapsConfig::Bool(false),
+            &AHashMap::default(),
+            None,
+            false,
+            None,
+        )
+        .expect("Failed to print");
+    printed_code.code
 }
 
 fn create_any_type() -> TsTypeAnn {
@@ -217,7 +214,7 @@ mod tests {
         let cm: Lrc<SourceMap> = Default::default();
         let file = cm.new_source_file(FileName::Custom("test.js".into()), input.into());
 
-        let mut module = parse(&file).unwrap();
+        let mut module = parse(file, &cm).unwrap();
         let actual_output = add_types(&mut module, cm);
 
         assert_eq!(format!("{expected_output}\n"), actual_output);
