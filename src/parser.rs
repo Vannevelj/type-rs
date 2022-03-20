@@ -17,15 +17,6 @@ pub fn add_types(contents: String) -> String {
 
     for descendant in ast.descendants() {
         match descendant.kind() {
-            // SyntaxKind::VAR_DECL => {
-            //     let declaration = descendant.to::<VarDecl>();
-            //     for declarator in declaration.declared() {
-            //         if let Some(pat) = declarator.pattern() {
-            //             let expression_type = Some(get_type_from_expression(declarator.value()));
-            //             update_pattern(&pat, expression_type, &mut fixer);
-            //         }
-            //     }
-            // }
             SyntaxKind::FN_DECL => {
                 let declaration = descendant.to::<FnDecl>();
                 for param in declaration
@@ -163,39 +154,6 @@ mod tests {
     }
 
     #[test]
-    fn add_types_variable_no_initializer() {
-        compare("let x;", "let x: any;");
-    }
-
-    #[test]
-    fn add_types_variable_let() {
-        compare("let x = 5;", "let x: any = 5;");
-    }
-
-    #[test]
-    fn add_types_variable_const() {
-        compare("const x = 5;", "const x: any = 5;");
-    }
-
-    #[test]
-    fn add_types_variable_var() {
-        compare("var x = 5;", "var x: any = 5;");
-    }
-
-    #[test]
-    fn add_types_variable_multi() {
-        compare("let x = 5, y = 6;", "let x: any = 5, y: any = 6;");
-    }
-
-    #[test]
-    fn add_types_variable_in_function() {
-        compare(
-            "function foo() { let x = 5; }",
-            "function foo() { let x: any = 5; }",
-        );
-    }
-
-    #[test]
     fn add_types_respects_whitespace() {
         compare(
             "
@@ -220,18 +178,16 @@ function foo(
     }
 
     #[test]
-    fn add_types_array() {
-        compare("const x = [];", "const x: any[] = [];");
-    }
-
-    #[test]
     fn add_types_array_function_default_value() {
         compare("function foo(a = []) {}", "function foo(a: any[] = []) {}");
     }
 
     #[test]
     fn add_types_preexisting_type() {
-        compare("let x: number = 5;", "let x: number = 5;");
+        compare(
+            "function foo(a: string[] = []) {}",
+            "function foo(a: string[] = []) {}",
+        );
     }
 
     #[test]
@@ -240,26 +196,10 @@ function foo(
     }
 
     #[test]
-    fn add_types_err() {
+    fn add_types_destructured_parameter() {
         compare(
-            "function addRouteToEngine(
-            routeView: string,
-            sport: string,
-            components: Object,
-            onLoadedData: ?Function,
-            features: Array<string> = [],
-            roles: Array<string> = [],
-            specifiedRouteToInject: ?string = '',
-            specifiedOptionalRouteToInject: ?string): void {}",
-            "function addRouteToEngine(
-                routeView: string,
-                sport: string,
-                components: Object,
-                onLoadedData: ?Function,
-                features: Array<string> = [],
-                roles: Array<string> = [],
-                specifiedRouteToInject: ?string = '',
-                specifiedOptionalRouteToInject: ?string): void {}",
+            "export function getRole({ permissions }) { }",
+            "export function getRole({ permissions }: { permissions: any }) { }",
         );
     }
 }
