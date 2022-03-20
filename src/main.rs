@@ -1,7 +1,7 @@
 mod parser;
 
-use std::{fs, thread};
 use std::path::{Path, PathBuf};
+use std::{fs, thread};
 
 use log::{debug, error, info, warn};
 
@@ -60,6 +60,13 @@ fn handle_file(path: PathBuf, file_name: String, extension: &str) {
                 warn!("Skipped {path:?} due to Flow");
                 return;
             }
+
+            let extension = if contents.contains("import React") {
+                "tsx"
+            } else {
+                extension
+            };
+
             let new_source = add_types(contents);
             let new_path = path.with_file_name(format!("{file_name}.{extension}"));
             info!("Writing new file at {new_path:?}");
