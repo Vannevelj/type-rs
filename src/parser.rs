@@ -128,9 +128,9 @@ mod tests {
     use super::*;
 
     fn compare(input: &str, expected_output: &str) {
-        env_logger::init_from_env(
-            env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "trace"),
-        );
+        // env_logger::init_from_env(
+        //     env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "trace"),
+        // );
         let output = add_types(String::from(input));
         assert_eq!(expected_output, output);
     }
@@ -198,8 +198,91 @@ function foo(
     #[test]
     fn add_types_destructured_parameter() {
         compare(
-            "export function getRole({ permissions }) { }",
-            "export function getRole({ permissions }: { permissions: any }) { }",
+            "function getRole({ permissions }) { }",
+            "function getRole({ permissions }: { permissions: any }) { }",
+        );
+    }
+
+    #[test]
+    fn add_types_for_in() {
+        compare(
+            "
+function foo() {          
+    for (const key in {}) {
+
+    }
+}
+          ",
+            "
+function foo() {          
+    for (const key in {}) {
+
+    }
+}",
+        );
+    }
+
+    #[test]
+    fn add_types_export_default_function() {
+        compare(
+            "export default function foo(route) { }",
+            "export default function foo(route: any) { }",
+        );
+    }
+
+    #[test]
+    fn add_types_export_const() {
+        compare(
+            "export const mapDispatchToProps = (dispatch) => { }",
+            "export const mapDispatchToProps = (dispatch: any) => { }",
+        );
+    }
+
+    #[test]
+    fn add_types_class_function() {
+        compare(
+            "
+class ColorPicker {
+  componentDidUpdate(prevProps, prevState) { }
+}",
+            "
+class ColorPicker {
+  componentDidUpdate(prevProps: any, prevState: any) { }
+}",
+        );
+    }
+
+    #[test]
+    fn add_types_const_arrow_function() {
+        compare(
+            "const mapStateToProps = (state, props) => { }",
+            "const mapStateToProps = (state: any, props: any) => { }",
+        );
+    }
+
+    #[test]
+    fn add_types_lambda() {
+        compare(
+            "function foo() { sources.filter((v, k) => true; }",
+            "function foo() { sources.filter((v: any, k: any) => true; }",
+        );
+    }
+
+    #[test]
+    fn add_types_functions_as_object_keys() {
+        compare(
+            "
+function foo() {
+  return {
+    bar: (a, b) => {},
+  };
+};",
+"
+function foo() {
+  return {
+    bar: (a: any, b: any) => {},
+  };
+};"
         );
     }
 }
