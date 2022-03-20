@@ -1,7 +1,7 @@
 use rslint_core::autofix::Fixer;
 use rslint_errors::Span;
 use rslint_parser::{
-    ast::{Expr, FnDecl, Pattern, VarDecl},
+    ast::{Expr, FnDecl, Name, Pattern, VarDecl},
     parse_text, AstNode, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
 use std::sync::Arc;
@@ -60,6 +60,11 @@ fn update_pattern(pattern: &Pattern, type_annotation: Option<&str>, fixer: &mut 
             println!("text: {:?}", assign.text());
             println!("key: {:?}", assign.key());
 
+            if let Some(name) = assign.syntax().child_with_ast::<Name>() {
+                let span = name.syntax().as_range();
+                fixer.insert_after(span, format!(": {}", type_annotation.unwrap_or("any")));
+            }
+
             let expression_type = Some(get_type_from_expression(assign.value()));
             if let Some(pat) = assign.key() {
                 println!("key: {pat:?}");
@@ -74,6 +79,7 @@ fn update_pattern(pattern: &Pattern, type_annotation: Option<&str>, fixer: &mut 
 }
 
 fn get_type_from_expression<'a>(expr: Option<Expr>) -> &'a str {
+    println!("expr: {expr:?}");
     match expr {
         Some(Expr::ArrayExpr(_)) => "any[]",
         _ => "any"
