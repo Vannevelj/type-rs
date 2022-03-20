@@ -43,7 +43,7 @@ pub fn add_types(contents: String) -> String {
 
 fn update_pattern(pattern: &Pattern, type_annotation: Option<&str>, fixer: &mut Fixer) {
     match pattern {
-        Pattern::SinglePattern(single) => {
+        Pattern::SinglePattern(single) if single.ty().is_none() => {
             println!("single: {single:?}");
             if let Some(name) = single.name() {
                 let span = name.syntax().as_range();
@@ -71,6 +71,7 @@ fn update_pattern(pattern: &Pattern, type_annotation: Option<&str>, fixer: &mut 
         Pattern::ObjectPattern(_) => todo!(),
         Pattern::ArrayPattern(_) => todo!(),
         Pattern::ExprPattern(_) => todo!(),
+        _ => return
     }
 }
 
