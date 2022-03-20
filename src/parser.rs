@@ -231,14 +231,6 @@ function foo() {
     }
 
     #[test]
-    fn add_types_export_const() {
-        compare(
-            "export const mapDispatchToProps = (dispatch) => { }",
-            "export const mapDispatchToProps = (dispatch: any) => { }",
-        );
-    }
-
-    #[test]
     fn add_types_class_function() {
         compare(
             "
