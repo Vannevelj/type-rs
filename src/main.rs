@@ -4,11 +4,8 @@ use std::fs;
 use std::path::Path;
 
 use log::{debug, error, info, warn};
-use swc::Compiler;
-use swc_common::sync::Lrc;
-use swc_common::SourceMap;
 
-use crate::parser::{add_types, parse};
+use crate::parser::add_types;
 
 fn main() {
     // env_logger::init_from_env(
@@ -42,26 +39,19 @@ fn traverse_directories(path: &Path) {
             };
 
             debug!("Processing {:?}", file_name);
-            let cm: Lrc<SourceMap> = Default::default();
 
-            return match cm.load_file(path) {
-                Ok(source_file) => {
-                    let compiler = Compiler::new(cm.clone());
-                    let program = parse(source_file, &cm, &compiler);
-                    if program.is_err() {
-                        error!("Unable to parse file: {file_name}");
-                        return;
-                    }
-                    let new_source = add_types(&mut program.unwrap(), &compiler);
+            match fs::read_to_string(path) {
+                Ok(contents) => {
+                    let new_source = add_types(contents);
                     let new_path = path.with_file_name(format!("{file_name}.{target_extension}"));
                     info!("Writing new file at {new_path:?}");
                     fs::write(path, new_source).expect("Unable to write file");
                     // fs::remove_file(path).expect("Failed to delete file");
                 }
-                Err(_) => {
-                    error!("Unable to load file: {file_name}");
+                Err(error) => {
+                    error!("Unable to load file {file_name}: {error}");
                 }
-            };
+            }
         }
     }
 

@@ -9,11 +9,7 @@ edition = "2021"
 thiserror = "1.0.30"
 log = "0.4.14"
 env_logger = "0.9.0"
-
-swc = { git = "https://github.com/swc-project/swc" }
-swc_ecma_ast= { git = "https://github.com/swc-project/swc" }
-swc_ecma_parser= { git = "https://github.com/swc-project/swc" }
-
-[dependencies.swc_common]
-git = "https://github.com/swc-project/swc"
-features = ["tty-emitter"]
+rslint_parser = "0.3.1"
+rslint_rowan = "0.10.0"
+rslint_errors = "0.2.0"
+rslint_core = "0.3.0"
