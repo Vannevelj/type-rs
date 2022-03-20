@@ -45,8 +45,7 @@ fn update_pattern(pattern: &Pattern, type_annotation: Option<&str>, fixer: &mut 
     match pattern {
         Pattern::SinglePattern(single) if single.ty().is_none() => {
             println!("single: {single:?}");
-            if let Some(name) = single.name() {
-                let span = name.syntax().as_range();
+            if let Some(span) = single.name().map(|name| name.syntax().as_range()) {
                 fixer.insert_after(span, format!(": {}", type_annotation.unwrap_or("any")));
             }
         }
@@ -62,7 +61,6 @@ fn update_pattern(pattern: &Pattern, type_annotation: Option<&str>, fixer: &mut 
             println!("key: {:?}", assign.key());
 
             let expression_type = Some(get_type_from_expression(assign.value()));
-
             if let Some(pat) = assign.key() {
                 println!("key: {pat:?}");
                 update_pattern(&pat, expression_type, fixer);
@@ -71,7 +69,7 @@ fn update_pattern(pattern: &Pattern, type_annotation: Option<&str>, fixer: &mut 
         Pattern::ObjectPattern(_) => todo!(),
         Pattern::ArrayPattern(_) => todo!(),
         Pattern::ExprPattern(_) => todo!(),
-        _ => return
+        _ => return,
     }
 }
 
@@ -195,7 +193,7 @@ mod tests {
     }
 
     #[test]
-    fn add_types_whitespace() {
+    fn add_types_respects_whitespace() {
         compare(
             "
 function foo(
@@ -203,6 +201,7 @@ function foo(
     b,
     c) 
 {
+    /* hello comments */
     console.log(test);
 }",
             "
@@ -211,6 +210,7 @@ function foo(
     b: any,
     c: any) 
 {
+    /* hello comments */
     console.log(test);
 }",
         );
