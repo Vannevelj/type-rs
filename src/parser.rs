@@ -1,7 +1,10 @@
-use std::sync::Arc;
 use rslint_core::autofix::Fixer;
 use rslint_errors::Span;
-use rslint_parser::{parse_text, SyntaxNodeExt, AstNode};
+use rslint_parser::{
+    ast::{FnDecl, Pattern, VarDecl},
+    parse_text, AstNode, SyntaxKind, SyntaxNodeExt,
+};
+use std::sync::Arc;
 
 pub fn add_types(contents: String) -> String {
     let parse = parse_text(contents.as_str(), 0);
@@ -11,20 +14,39 @@ pub fn add_types(contents: String) -> String {
 
     for descendant in ast.descendants() {
         match descendant.kind() {
-            rslint_parser::SyntaxKind::VAR_DECL => {
-                let declaration = descendant.to::<rslint_parser::ast::VarDecl>();
-                let declarators = declaration.declared();
-                for declarator in declarators {
+            SyntaxKind::VAR_DECL => {
+                let declaration = descendant.to::<VarDecl>();
+                for declarator in declaration.declared() {
                     match declarator.pattern().unwrap() {
-                        rslint_parser::ast::Pattern::SinglePattern(single) => {
+                        Pattern::SinglePattern(single) => {
                             let span = single.name().unwrap().syntax().as_range();
-                            fixer.insert_after(span, ": any");                            
-                        },
-                        _ => continue
+                            fixer.insert_after(span, ": any");
+                        }
+                        _ => continue,
                     };
                 }
-            },
-            _ => continue
+            }
+            SyntaxKind::FN_DECL => {
+                let declaration = descendant.to::<FnDecl>();
+                for param in declaration
+                    .parameters()
+                    .into_iter()
+                    .flat_map(|pl| pl.parameters())
+                {
+                    match param {
+                        Pattern::SinglePattern(single) => {
+                            let span = single.name().unwrap().syntax().as_range();
+                            fixer.insert_after(span, ": any");
+                        }
+                        Pattern::RestPattern(_) => todo!(),
+                        Pattern::AssignPattern(_) => todo!(),
+                        Pattern::ObjectPattern(_) => todo!(),
+                        Pattern::ArrayPattern(_) => todo!(),
+                        Pattern::ExprPattern(_) => todo!(),
+                    }
+                }
+            }
+            _ => continue,
         }
     }
 
