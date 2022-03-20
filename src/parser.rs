@@ -51,30 +51,17 @@ fn update_pattern(pattern: &Pattern, type_annotation: Option<&str>, fixer: &mut 
         }
         Pattern::RestPattern(_) => todo!(),
         Pattern::AssignPattern(assign) => {
-            println!("assign: {assign:?}");
-            println!("value: {:?}", assign.value());
-            println!("ty: {:?}", assign.ty());
-            println!("eq_token: {:?}", assign.eq_token());
-            println!("colon_token: {:?}", assign.colon_token());
-            println!("decorators: {:?}", assign.decorators());
-            println!("text: {:?}", assign.text());
-            println!("key: {:?}", assign.key());
-
+            // FIXME: AssignPattern.key() returns None so we work around it by querying the children instead. Should be Pattern::SinglePattern
+            let expression_type = Some(get_type_from_expression(assign.value()));
             if let Some(name) = assign.syntax().child_with_ast::<Name>() {
                 let span = name.syntax().as_range();
-                fixer.insert_after(span, format!(": {}", type_annotation.unwrap_or("any")));
-            }
-
-            let expression_type = Some(get_type_from_expression(assign.value()));
-            if let Some(pat) = assign.key() {
-                println!("key: {pat:?}");
-                update_pattern(&pat, expression_type, fixer);
+                fixer.insert_after(span, format!(": {}", expression_type.unwrap_or("any")));
             }
         }
         Pattern::ObjectPattern(_) => todo!(),
         Pattern::ArrayPattern(_) => todo!(),
         Pattern::ExprPattern(_) => todo!(),
-        _ => return,
+        _ => (),
     }
 }
 
