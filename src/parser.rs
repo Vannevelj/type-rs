@@ -1,8 +1,8 @@
 use rslint_core::autofix::Fixer;
 use rslint_errors::Span;
 use rslint_parser::{
-    ast::{FnDecl, Pattern, VarDecl},
-    parse_text, AstNode, SyntaxKind, SyntaxNodeExt, SyntaxNode,
+    ast::{Expr, FnDecl, Pattern, VarDecl},
+    parse_text, AstNode, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
 use std::sync::Arc;
 
@@ -19,7 +19,8 @@ pub fn add_types(contents: String) -> String {
                 let declaration = descendant.to::<VarDecl>();
                 for declarator in declaration.declared() {
                     if let Some(pat) = declarator.pattern() {
-                        update_pattern(&pat, &mut fixer);
+                        let expression_type = Some(get_type_from_expression(declarator.value()));
+                        update_pattern(&pat, expression_type, &mut fixer);
                     }
                 }
             }
@@ -30,7 +31,7 @@ pub fn add_types(contents: String) -> String {
                     .into_iter()
                     .flat_map(|pl| pl.parameters())
                 {
-                    update_pattern(&param, &mut fixer);
+                    update_pattern(&param, None, &mut fixer);
                 }
             }
             _ => continue,
@@ -40,12 +41,14 @@ pub fn add_types(contents: String) -> String {
     fixer.apply()
 }
 
-fn update_pattern(pattern: &Pattern, fixer: &mut Fixer) {
+fn update_pattern(pattern: &Pattern, type_annotation: Option<&str>, fixer: &mut Fixer) {
     match pattern {
         Pattern::SinglePattern(single) => {
             println!("single: {single:?}");
-            let span = single.name().unwrap().syntax().as_range();
-            fixer.insert_after(span, ": any");
+            if let Some(name) = single.name() {
+                let span = name.syntax().as_range();
+                fixer.insert_after(span, format!(": {}", type_annotation.unwrap_or("any")));
+            }
         }
         Pattern::RestPattern(_) => todo!(),
         Pattern::AssignPattern(assign) => {
@@ -57,10 +60,12 @@ fn update_pattern(pattern: &Pattern, fixer: &mut Fixer) {
             println!("decorators: {:?}", assign.decorators());
             println!("text: {:?}", assign.text());
             println!("key: {:?}", assign.key());
-            
+
+            let expression_type = Some(get_type_from_expression(assign.value()));
+
             if let Some(pat) = assign.key() {
                 println!("key: {pat:?}");
-                update_pattern(&pat, fixer);
+                update_pattern(&pat, expression_type, fixer);
             }
         }
         Pattern::ObjectPattern(_) => todo!(),
@@ -69,12 +74,53 @@ fn update_pattern(pattern: &Pattern, fixer: &mut Fixer) {
     }
 }
 
+fn get_type_from_expression<'a>(expr: Option<Expr>) -> &'a str {
+    match expr {
+        Some(Expr::ArrayExpr(_)) => "any[]",
+        _ => "any"
+
+        // Expr::ArrowExpr(_) => todo!(),
+        // Expr::Literal(_) => todo!(),
+        // Expr::Template(_) => todo!(),
+        // Expr::NameRef(_) => todo!(),
+        // Expr::ThisExpr(_) => todo!(),
+        // Expr::ObjectExpr(_) => todo!(),
+        // Expr::GroupingExpr(_) => todo!(),
+        // Expr::BracketExpr(_) => todo!(),
+        // Expr::DotExpr(_) => todo!(),
+        // Expr::NewExpr(_) => todo!(),
+        // Expr::CallExpr(_) => todo!(),
+        // Expr::UnaryExpr(_) => todo!(),
+        // Expr::BinExpr(_) => todo!(),
+        // Expr::CondExpr(_) => todo!(),
+        // Expr::AssignExpr(_) => todo!(),
+        // Expr::SequenceExpr(_) => todo!(),
+        // Expr::FnExpr(_) => todo!(),
+        // Expr::ClassExpr(_) => todo!(),
+        // Expr::NewTarget(_) => todo!(),
+        // Expr::ImportMeta(_) => todo!(),
+        // Expr::SuperCall(_) => todo!(),
+        // Expr::ImportCall(_) => todo!(),
+        // Expr::YieldExpr(_) => todo!(),
+        // Expr::AwaitExpr(_) => todo!(),
+        // Expr::PrivatePropAccess(_) => todo!(),
+        // Expr::TsNonNull(_) => todo!(),
+        // Expr::TsAssertion(_) => todo!(),
+        // Expr::TsConstAssertion(_) => todo!(),
+    }
+}
+
 fn print_ast(root: &SyntaxNode) {
     fn write_node(node: &SyntaxNode, depth: usize) {
         let name = node.readable_stmt_name();
         let spaces = " ".repeat(depth);
 
-        println!("{spaces}{name} ({:?}) [{:?}-{:?}]", &node.kind(), &node.text_range().start(), &node.text_range().end());
+        println!(
+            "{spaces}{name} ({:?}) [{:?}-{:?}]",
+            &node.kind(),
+            &node.text_range().start(),
+            &node.text_range().end()
+        );
 
         for child in node.children() {
             write_node(&child, depth + 1);
@@ -149,14 +195,16 @@ mod tests {
 
     #[test]
     fn add_types_whitespace() {
-        compare("
+        compare(
+            "
 function foo(
     a,
     b,
     c) 
 {
     console.log(test);
-}","
+}",
+            "
 function foo(
     a: any,
     b: any,
