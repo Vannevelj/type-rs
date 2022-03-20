@@ -1,13 +1,15 @@
+use log::{debug, trace};
 use rslint_core::autofix::Fixer;
 use rslint_errors::Span;
 use rslint_parser::{
-    ast::{Expr, FnDecl, Name, Pattern, VarDecl},
-    parse_text, AstNode, SyntaxKind, SyntaxNode, SyntaxNodeExt,
+    ast::{Expr, FnDecl, Name, Pattern},
+    parse_with_syntax, AstNode, Syntax, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
 use std::sync::Arc;
 
 pub fn add_types(contents: String) -> String {
-    let parse = parse_text(contents.as_str(), 0);
+    let syntax = Syntax::default().typescript();
+    let parse = parse_with_syntax(contents.as_str(), 0, syntax);
     let ast = parse.syntax();
     let arc = Arc::from(contents);
     let mut fixer = Fixer::new(arc);
@@ -15,15 +17,15 @@ pub fn add_types(contents: String) -> String {
 
     for descendant in ast.descendants() {
         match descendant.kind() {
-            SyntaxKind::VAR_DECL => {
-                let declaration = descendant.to::<VarDecl>();
-                for declarator in declaration.declared() {
-                    if let Some(pat) = declarator.pattern() {
-                        let expression_type = Some(get_type_from_expression(declarator.value()));
-                        update_pattern(&pat, expression_type, &mut fixer);
-                    }
-                }
-            }
+            // SyntaxKind::VAR_DECL => {
+            //     let declaration = descendant.to::<VarDecl>();
+            //     for declarator in declaration.declared() {
+            //         if let Some(pat) = declarator.pattern() {
+            //             let expression_type = Some(get_type_from_expression(declarator.value()));
+            //             update_pattern(&pat, expression_type, &mut fixer);
+            //         }
+            //     }
+            // }
             SyntaxKind::FN_DECL => {
                 let declaration = descendant.to::<FnDecl>();
                 for param in declaration
@@ -42,9 +44,13 @@ pub fn add_types(contents: String) -> String {
 }
 
 fn update_pattern(pattern: &Pattern, type_annotation: Option<&str>, fixer: &mut Fixer) {
+    for child in pattern.syntax().children() {
+        println!("child: {child:?}");
+    }
+
     match pattern {
         Pattern::SinglePattern(single) if single.ty().is_none() => {
-            println!("single: {single:?}");
+            trace!("single: {single:?}");
             if let Some(span) = single.name().map(|name| name.syntax().as_range()) {
                 fixer.insert_after(span, format!(": {}", type_annotation.unwrap_or("any")));
             }
@@ -58,15 +64,19 @@ fn update_pattern(pattern: &Pattern, type_annotation: Option<&str>, fixer: &mut 
                 fixer.insert_after(span, format!(": {}", expression_type.unwrap_or("any")));
             }
         }
-        Pattern::ObjectPattern(_) => todo!(),
-        Pattern::ArrayPattern(_) => todo!(),
+        Pattern::ObjectPattern(obj) => {
+            debug!("object pattern: {:?}", obj.text());
+        }
+        Pattern::ArrayPattern(array) => {
+            debug!("array pattern: {:?}", array.text());
+        }
         Pattern::ExprPattern(_) => todo!(),
         _ => (),
     }
 }
 
 fn get_type_from_expression<'a>(expr: Option<Expr>) -> &'a str {
-    println!("expr: {expr:?}");
+    trace!("expr: {expr:?}");
     match expr {
         Some(Expr::ArrayExpr(_)) => "any[]",
         _ => "any"
@@ -107,7 +117,7 @@ fn print_ast(root: &SyntaxNode) {
         let name = node.readable_stmt_name();
         let spaces = " ".repeat(depth);
 
-        println!(
+        trace!(
             "{spaces}{name} ({:?}) [{:?}-{:?}]",
             &node.kind(),
             &node.text_range().start(),
@@ -127,9 +137,9 @@ mod tests {
     use super::*;
 
     fn compare(input: &str, expected_output: &str) {
-        // env_logger::init_from_env(
-        //     env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "trace"),
-        // );
+        env_logger::init_from_env(
+            env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "trace"),
+        );
         let output = add_types(String::from(input));
         assert_eq!(expected_output, output);
     }
@@ -227,5 +237,29 @@ function foo(
     #[test]
     fn add_types_preserves_comments() {
         compare("// hello", "// hello");
+    }
+
+    #[test]
+    fn add_types_err() {
+        compare(
+            "function addRouteToEngine(
+            routeView: string,
+            sport: string,
+            components: Object,
+            onLoadedData: ?Function,
+            features: Array<string> = [],
+            roles: Array<string> = [],
+            specifiedRouteToInject: ?string = '',
+            specifiedOptionalRouteToInject: ?string): void {}",
+            "function addRouteToEngine(
+                routeView: string,
+                sport: string,
+                components: Object,
+                onLoadedData: ?Function,
+                features: Array<string> = [],
+                roles: Array<string> = [],
+                specifiedRouteToInject: ?string = '',
+                specifiedOptionalRouteToInject: ?string): void {}",
+        );
     }
 }

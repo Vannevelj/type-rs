@@ -1,24 +1,26 @@
 mod parser;
 
-use std::fs;
-use std::path::Path;
+use std::{fs, thread};
+use std::path::{Path, PathBuf};
 
 use log::{debug, error, info, warn};
 
 use crate::parser::add_types;
 
 fn main() {
-    // env_logger::init_from_env(
-    //     env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "debug"),
-    // );
+    env_logger::init_from_env(
+        env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "debug"),
+    );
 
     let path = Path::new("C:\\source\\hudl-videospa\\src\\client-app\\app").to_path_buf();
-    traverse_directories(&path);
+    traverse_directories(path);
+
+    println!("Finished conversion!")
 }
 
-fn traverse_directories(path: &Path) {
+fn traverse_directories(path: PathBuf) {
     // We use metadata since path::is_file() coerces an error into false
-    let metadata = match fs::metadata(path) {
+    let metadata = match fs::metadata(path.clone()) {
         Ok(m) => m,
         Err(err) => {
             warn!("Unable to read the metadata for {:?}: {}", path, err);
@@ -40,23 +42,32 @@ fn traverse_directories(path: &Path) {
 
             debug!("Processing {:?}", file_name);
 
-            match fs::read_to_string(path) {
-                Ok(contents) => {
-                    let new_source = add_types(contents);
-                    let new_path = path.with_file_name(format!("{file_name}.{target_extension}"));
-                    info!("Writing new file at {new_path:?}");
-                    fs::write(path, new_source).expect("Unable to write file");
-                    // fs::remove_file(path).expect("Failed to delete file");
-                }
-                Err(error) => {
-                    error!("Unable to load file {file_name}: {error}");
-                }
-            }
+            thread::spawn(move || handle_file(path, file_name, target_extension));
+            return;
         }
     }
 
     debug!("Diving into new directory: {:?}", path);
     for directory in fs::read_dir(path).unwrap().flatten() {
-        traverse_directories(&directory.path());
+        traverse_directories(directory.path().to_path_buf());
+    }
+}
+
+fn handle_file(path: PathBuf, file_name: String, extension: &str) {
+    match fs::read_to_string(path.clone()) {
+        Ok(contents) => {
+            if contents.contains("@flow") {
+                warn!("Skipped {path:?} due to Flow");
+                return;
+            }
+            let new_source = add_types(contents);
+            let new_path = path.with_file_name(format!("{file_name}.{extension}"));
+            info!("Writing new file at {new_path:?}");
+            fs::write(new_path, new_source).expect("Unable to write file");
+            fs::remove_file(path).expect("Failed to delete file");
+        }
+        Err(error) => {
+            error!("Unable to load file {file_name}: {error}");
+        }
     }
 }
