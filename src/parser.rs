@@ -2,7 +2,7 @@ use rslint_core::autofix::Fixer;
 use rslint_errors::Span;
 use rslint_parser::{
     ast::{FnDecl, Pattern, VarDecl},
-    parse_text, AstNode, SyntaxKind, SyntaxNodeExt,
+    parse_text, AstNode, SyntaxKind, SyntaxNodeExt, SyntaxNode,
 };
 use std::sync::Arc;
 
@@ -11,19 +11,16 @@ pub fn add_types(contents: String) -> String {
     let ast = parse.syntax();
     let arc = Arc::from(contents);
     let mut fixer = Fixer::new(arc);
+    print_ast(&ast);
 
     for descendant in ast.descendants() {
         match descendant.kind() {
             SyntaxKind::VAR_DECL => {
                 let declaration = descendant.to::<VarDecl>();
                 for declarator in declaration.declared() {
-                    match declarator.pattern().unwrap() {
-                        Pattern::SinglePattern(single) => {
-                            let span = single.name().unwrap().syntax().as_range();
-                            fixer.insert_after(span, ": any");
-                        }
-                        _ => continue,
-                    };
+                    if let Some(pat) = declarator.pattern() {
+                        update_pattern(&pat, &mut fixer);
+                    }
                 }
             }
             SyntaxKind::FN_DECL => {
@@ -33,17 +30,7 @@ pub fn add_types(contents: String) -> String {
                     .into_iter()
                     .flat_map(|pl| pl.parameters())
                 {
-                    match param {
-                        Pattern::SinglePattern(single) => {
-                            let span = single.name().unwrap().syntax().as_range();
-                            fixer.insert_after(span, ": any");
-                        }
-                        Pattern::RestPattern(_) => todo!(),
-                        Pattern::AssignPattern(_) => todo!(),
-                        Pattern::ObjectPattern(_) => todo!(),
-                        Pattern::ArrayPattern(_) => todo!(),
-                        Pattern::ExprPattern(_) => todo!(),
-                    }
+                    update_pattern(&param, &mut fixer);
                 }
             }
             _ => continue,
@@ -51,6 +38,50 @@ pub fn add_types(contents: String) -> String {
     }
 
     fixer.apply()
+}
+
+fn update_pattern(pattern: &Pattern, fixer: &mut Fixer) {
+    match pattern {
+        Pattern::SinglePattern(single) => {
+            println!("single: {single:?}");
+            let span = single.name().unwrap().syntax().as_range();
+            fixer.insert_after(span, ": any");
+        }
+        Pattern::RestPattern(_) => todo!(),
+        Pattern::AssignPattern(assign) => {
+            println!("assign: {assign:?}");
+            println!("value: {:?}", assign.value());
+            println!("ty: {:?}", assign.ty());
+            println!("eq_token: {:?}", assign.eq_token());
+            println!("colon_token: {:?}", assign.colon_token());
+            println!("decorators: {:?}", assign.decorators());
+            println!("text: {:?}", assign.text());
+            println!("key: {:?}", assign.key());
+            
+            if let Some(pat) = assign.key() {
+                println!("key: {pat:?}");
+                update_pattern(&pat, fixer);
+            }
+        }
+        Pattern::ObjectPattern(_) => todo!(),
+        Pattern::ArrayPattern(_) => todo!(),
+        Pattern::ExprPattern(_) => todo!(),
+    }
+}
+
+fn print_ast(root: &SyntaxNode) {
+    fn write_node(node: &SyntaxNode, depth: usize) {
+        let name = node.readable_stmt_name();
+        let spaces = " ".repeat(depth);
+
+        println!("{spaces}{name} ({:?}) [{:?}-{:?}]", &node.kind(), &node.text_range().start(), &node.text_range().end());
+
+        for child in node.children() {
+            write_node(&child, depth + 1);
+        }
+    }
+
+    write_node(root, 0);
 }
 
 #[cfg(test)]
@@ -112,23 +143,25 @@ mod tests {
     fn add_types_variable_in_function() {
         compare(
             "function foo() { let x = 5; }",
-            "function foo() {
-    let x: any = 5;
-}",
+            "function foo() { let x: any = 5; }",
         );
     }
 
     #[test]
     fn add_types_whitespace() {
-        compare(
-            "function foo(
-            a,
-            b,
-            c
-        ) {
-            console.log(test);
-        }",
-            "function foo(a: any, b: any, c: any) {
+        compare("
+function foo(
+    a,
+    b,
+    c) 
+{
+    console.log(test);
+}","
+function foo(
+    a: any,
+    b: any,
+    c: any) 
+{
     console.log(test);
 }",
         );
