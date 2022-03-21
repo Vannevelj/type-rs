@@ -3,6 +3,10 @@ on:
     branches:
       - master
 
+concurrency:
+  group: ${{ github.head_ref }}-clippy
+  cancel-in-progress: true
+
 jobs: 
   build-linux:
     name: Linux executable

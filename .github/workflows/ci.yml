@@ -3,6 +3,10 @@ on:
     branches:
       - master
 
+concurrency:
+  group: ${{ github.head_ref }}-ci
+  cancel-in-progress: true
+
 jobs:
   build-mac:
     name: Mac executable
