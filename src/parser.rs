@@ -44,7 +44,7 @@ fn update_pattern(pattern: &Pattern, type_annotation: Option<&str>, fixer: &mut 
             }
         }
         Pattern::RestPattern(_) => todo!(),
-        Pattern::AssignPattern(assign) => {
+        Pattern::AssignPattern(assign) if assign.ty().is_none() => {
             // FIXME: AssignPattern.key() returns None so we work around it by querying the children instead. Should be Pattern::SinglePattern
             let expression_type = Some(get_type_from_expression(assign.value()));
             if let Some(name) = assign.syntax().child_with_ast::<Name>() {
