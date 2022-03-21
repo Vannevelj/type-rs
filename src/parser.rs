@@ -211,8 +211,7 @@ function foo() {
     for (const key in {}) {
 
     }
-}
-          ",
+}",
             "
 function foo() {          
     for (const key in {}) {
