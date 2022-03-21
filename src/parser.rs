@@ -1,7 +1,7 @@
 use log::{debug, trace};
 use rslint_core::autofix::Fixer;
 use rslint_parser::{
-    ast::{Expr, Name, ParameterList, Pattern},
+    ast::{Declarator, Expr, ForStmtInit, Name, ParameterList, Pattern},
     parse_with_syntax, AstNode, Syntax, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
 use std::sync::Arc;
@@ -21,6 +21,20 @@ pub fn add_types(contents: String) -> String {
                 for param in param_list.parameters() {
                     debug!("Updating pattern");
                     update_pattern(&param, None, &mut fixer);
+                }
+            }
+            SyntaxKind::DECLARATOR => {
+                let declarator = descendant.to::<Declarator>();
+                if declarator
+                    .syntax()
+                    .ancestors()
+                    .any(|ancestor| ancestor.is::<ForStmtInit>())
+                {
+                    continue;
+                }
+                match (declarator.value(), declarator.pattern()) {
+                    (None, Some(ref pattern)) => update_pattern(pattern, None, &mut fixer),
+                    _ => (),
                 }
             }
             _ => continue,
@@ -276,5 +290,25 @@ function foo() {
   };
 };",
         );
+    }
+
+    #[test]
+    fn add_types_variable_uninitialized_let() {
+        compare("let test;", "let test: any;");
+    }
+
+    #[test]
+    fn add_types_variable_uninitialized_multi() {
+        compare("let test, test2;", "let test: any, test2: any;");
+    }
+
+    #[test]
+    fn add_types_variable_uninitialized_const() {
+        compare("const test;", "const test: any;");
+    }
+
+    #[test]
+    fn add_types_variable_uninitialized_var() {
+        compare("var test;", "var test: any;");
     }
 }
