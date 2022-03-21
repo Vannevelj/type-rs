@@ -2,7 +2,7 @@ use log::{debug, trace};
 use rslint_core::autofix::Fixer;
 use rslint_errors::Span;
 use rslint_parser::{
-    ast::{Expr, FnDecl, FnExpr, Name, ParameterList, Pattern},
+    ast::{Expr, FnDecl, FnExpr, Name, ObjectPatternProp, ParameterList, Pattern},
     parse_with_syntax, AstNode, Syntax, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
 use std::sync::Arc;
@@ -33,13 +33,13 @@ pub fn add_types(contents: String) -> String {
 
 fn update_pattern(pattern: &Pattern, type_annotation: Option<&str>, fixer: &mut Fixer) {
     for child in pattern.syntax().children() {
-        println!("child: {child:?}");
+        trace!("child: {child:?}");
     }
 
     match pattern {
         Pattern::SinglePattern(single) if single.ty().is_none() => {
             trace!("single: {single:?}");
-            if let Some(span) = single.name().map(|name| name.syntax().as_range()) {
+            if let Some(span) = single.name().map(|name| name.range()) {
                 fixer.insert_after(span, format!(": {}", type_annotation.unwrap_or("any")));
             }
         }
@@ -48,12 +48,17 @@ fn update_pattern(pattern: &Pattern, type_annotation: Option<&str>, fixer: &mut 
             // FIXME: AssignPattern.key() returns None so we work around it by querying the children instead. Should be Pattern::SinglePattern
             let expression_type = Some(get_type_from_expression(assign.value()));
             if let Some(name) = assign.syntax().child_with_ast::<Name>() {
-                let span = name.syntax().as_range();
-                fixer.insert_after(span, format!(": {}", expression_type.unwrap_or("any")));
+                fixer.insert_after(
+                    name.range(),
+                    format!(": {}", expression_type.unwrap_or("any")),
+                );
             }
         }
-        Pattern::ObjectPattern(obj) => {
-            debug!("object pattern: {:?}", obj.text());
+        Pattern::ObjectPattern(obj) if obj.ty().is_none() => {
+            fixer.insert_after(
+                obj.range(),
+                format!(": {}", type_annotation.unwrap_or("any")),
+            );
         }
         Pattern::ArrayPattern(array) => {
             debug!("array pattern: {:?}", array.text());
@@ -125,9 +130,9 @@ mod tests {
     use super::*;
 
     fn compare(input: &str, expected_output: &str) {
-        env_logger::init_from_env(
-            env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "trace"),
-        );
+        // env_logger::init_from_env(
+        //     env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "trace"),
+        // );
         let output = add_types(String::from(input));
         assert_eq!(expected_output, output);
     }
@@ -195,8 +200,8 @@ function foo(
     #[test]
     fn add_types_destructured_parameter() {
         compare(
-            "function getRole({ permissions }) { }",
-            "function getRole({ permissions }: { permissions: any }) { }",
+            "function getRole({ permissions, user }) { }",
+            "function getRole({ permissions, user }: any) { }",
         );
     }
 
