@@ -2,7 +2,7 @@ use log::{debug, trace};
 use rslint_core::autofix::Fixer;
 use rslint_errors::Span;
 use rslint_parser::{
-    ast::{Expr, FnDecl, Name, Pattern},
+    ast::{Expr, FnDecl, FnExpr, Name, ParameterList, Pattern},
     parse_with_syntax, AstNode, Syntax, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
 use std::sync::Arc;
@@ -19,19 +19,24 @@ pub fn add_types(contents: String) -> String {
         match descendant.kind() {
             SyntaxKind::FN_DECL => {
                 let declaration = descendant.to::<FnDecl>();
-                for param in declaration
-                    .parameters()
-                    .into_iter()
-                    .flat_map(|pl| pl.parameters())
-                {
-                    update_pattern(&param, None, &mut fixer);
-                }
+                update_parameters(declaration.parameters(), &mut fixer);
+            }
+            SyntaxKind::FN_EXPR => {
+                let expression = descendant.to::<FnExpr>();
+                update_parameters(expression.parameters(), &mut fixer);
             }
             _ => continue,
         }
     }
 
     fixer.apply()
+}
+
+fn update_parameters(parameters: Option<ParameterList>, fixer: &mut Fixer) {
+    for param in parameters.into_iter().flat_map(|pl| pl.parameters()) {
+        debug!("Updating pattern");
+        update_pattern(&param, None, fixer);
+    }
 }
 
 fn update_pattern(pattern: &Pattern, type_annotation: Option<&str>, fixer: &mut Fixer) {
@@ -128,9 +133,9 @@ mod tests {
     use super::*;
 
     fn compare(input: &str, expected_output: &str) {
-        // env_logger::init_from_env(
-        //     env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "trace"),
-        // );
+        env_logger::init_from_env(
+            env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "trace"),
+        );
         let output = add_types(String::from(input));
         assert_eq!(expected_output, output);
     }
@@ -268,12 +273,12 @@ function foo() {
     bar: (a, b) => {},
   };
 };",
-"
+            "
 function foo() {
   return {
     bar: (a: any, b: any) => {},
   };
-};"
+};",
         );
     }
 }
