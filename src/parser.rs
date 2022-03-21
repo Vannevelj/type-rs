@@ -1,8 +1,7 @@
 use log::{debug, trace};
 use rslint_core::autofix::Fixer;
-use rslint_errors::Span;
 use rslint_parser::{
-    ast::{Expr, FnDecl, FnExpr, Name, ObjectPatternProp, ParameterList, Pattern},
+    ast::{Expr, Name, ParameterList, Pattern},
     parse_with_syntax, AstNode, Syntax, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
 use std::sync::Arc;
@@ -19,7 +18,7 @@ pub fn add_types(contents: String) -> String {
         match descendant.kind() {
             SyntaxKind::PARAMETER_LIST => {
                 let param_list = descendant.to::<ParameterList>();
-                for param in param_list.parameters().into_iter() {
+                for param in param_list.parameters() {
                     debug!("Updating pattern");
                     update_pattern(&param, None, &mut fixer);
                 }
