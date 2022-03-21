@@ -17,26 +17,18 @@ pub fn add_types(contents: String) -> String {
 
     for descendant in ast.descendants() {
         match descendant.kind() {
-            SyntaxKind::FN_DECL => {
-                let declaration = descendant.to::<FnDecl>();
-                update_parameters(declaration.parameters(), &mut fixer);
-            }
-            SyntaxKind::FN_EXPR => {
-                let expression = descendant.to::<FnExpr>();
-                update_parameters(expression.parameters(), &mut fixer);
+            SyntaxKind::PARAMETER_LIST => {
+                let param_list = descendant.to::<ParameterList>();
+                for param in param_list.parameters().into_iter() {
+                    debug!("Updating pattern");
+                    update_pattern(&param, None, &mut fixer);
+                }
             }
             _ => continue,
         }
     }
 
     fixer.apply()
-}
-
-fn update_parameters(parameters: Option<ParameterList>, fixer: &mut Fixer) {
-    for param in parameters.into_iter().flat_map(|pl| pl.parameters()) {
-        debug!("Updating pattern");
-        update_pattern(&param, None, fixer);
-    }
 }
 
 fn update_pattern(pattern: &Pattern, type_annotation: Option<&str>, fixer: &mut Fixer) {
