@@ -1,4 +1,4 @@
-use log::trace;
+use log::{trace, debug};
 use swc::config::{Config, JscConfig, Options};
 use swc_common::errors::{ColorConfig, Handler};
 use swc_common::sync::Lrc;
@@ -72,15 +72,18 @@ impl VisitMut for MyVisitor {
             .init
             .as_mut()
             .map(|initializer| get_type_from_expression(&mut *initializer));
+
         update_pattern(&mut declarator.name, type_ann);
     }
 }
 
 fn update_pattern(pat: &mut Pat, with_type: Option<TsTypeAnn>) {
     let with_type = with_type.unwrap_or_else(create_any_type);
+    debug!("update_pattern: {pat:?}");
 
     match pat {
         Pat::Ident(ref mut ident) if ident.type_ann.is_none() => {
+            debug!("ident: {ident:?}");
             ident.type_ann = Some(with_type);
         }
         Pat::Array(_) => todo!(),
@@ -89,6 +92,7 @@ fn update_pattern(pat: &mut Pat, with_type: Option<TsTypeAnn>) {
             object.type_ann = Some(create_any_type());
         }
         Pat::Assign(assign) if assign.type_ann.is_none() => {
+            debug!("assign: {assign:?}");
             let type_annotation = get_type_from_expression(&mut *assign.right);
             update_pattern(&mut assign.left, Some(type_annotation));
         }
@@ -258,16 +262,19 @@ function foo(
     #[test]
     fn add_types_const_arrow_function() {
         compare(
-            "const mapStateToProps = (state, props) => {}",
-            "const mapStateToProps = (state: any, props: any) => {}",
+            "const mapStateToProps = (state, props) => {};",
+            "const mapStateToProps = (state: any, props: any)=>{};",
         );
     }
 
     #[test]
     fn add_types_lambda() {
         compare(
-            "function foo() { sources.filter((v, k) => true ) };",
-            "function foo() { sources.filter((v: any, k: any) => true ) };",
+            "function foo() { sources.filter((v, k) => true ); };",
+            "function foo() {
+    sources.filter((v: any, k: any)=>true
+    ); 
+};",
         );
     }
 
@@ -276,15 +283,14 @@ function foo(
         compare(
             "
 function foo() {
-  return {
-    bar: (a, b) => {},
-  };
+    return {
+        bar: (a, b) => {}
+    };
 };",
-            "
-function foo() {
-  return {
-    bar: (a: any, b: any) => {},
-  };
+            "function foo() {
+    return {
+        bar: (a: any, b: any)=>{}
+    };
 };",
         );
     }
