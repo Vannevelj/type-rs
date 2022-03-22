@@ -1,140 +1,84 @@
-use log::{debug, trace};
-use rslint_core::autofix::Fixer;
-use rslint_parser::{
-    ast::{Declarator, Expr, ForStmtInit, Name, ParameterList, Pattern},
-    parse_with_syntax, AstNode, Syntax, SyntaxKind, SyntaxNode, SyntaxNodeExt,
+use swc::config::{Config, JscConfig, Options};
+use swc_common::errors::{ColorConfig, Handler};
+use swc_common::sync::Lrc;
+use swc_common::{FileName, SourceMap, Span};
+use swc_ecma_ast::{
+    EsVersion, Param, Pat, TsKeywordType, TsKeywordTypeKind, TsType, TsTypeAnn, VarDeclarator,
 };
-use std::sync::Arc;
+use swc_ecma_parser::{Syntax, TsConfig};
+use swc_ecma_transforms::pass::noop;
+use swc_ecma_visit::{as_folder, Fold, VisitMut, VisitMutWith};
 
 pub fn add_types(contents: String) -> String {
-    let syntax = Syntax::default().typescript();
-    let parse = parse_with_syntax(contents.as_str(), 0, syntax);
-    let ast = parse.syntax();
-    let arc = Arc::from(contents);
-    let mut fixer = Fixer::new(arc);
-    print_ast(&ast);
+    let cm: Lrc<SourceMap> = Default::default();
+    let file = cm.new_source_file(FileName::Custom("test.js".into()), String::from(contents));
+    let compiler = swc::Compiler::new(cm.clone());
+    let handler = Handler::with_tty_emitter(ColorConfig::Auto, true, false, Some(cm.clone()));
 
-    for descendant in ast.descendants() {
-        match descendant.kind() {
-            SyntaxKind::PARAMETER_LIST => {
-                let param_list = descendant.to::<ParameterList>();
-                for param in param_list.parameters() {
-                    update_pattern(&param, None, &mut fixer);
-                }
-            }
-            SyntaxKind::DECLARATOR => {
-                let declarator = descendant.to::<Declarator>();
-                if declarator
-                    .syntax()
-                    .ancestors()
-                    .any(|ancestor| ancestor.is::<ForStmtInit>())
-                {
-                    continue;
-                }
-                match (declarator.value(), declarator.pattern()) {
-                    (None, Some(ref pattern)) => update_pattern(pattern, None, &mut fixer),
-                    _ => (),
-                }
-            }
-            _ => continue,
-        }
-    }
+    let result = compiler.process_js_with_custom_pass(
+        file,
+        None,
+        &handler,
+        &Options {
+            config: Config {
+                jsc: JscConfig {
+                    preserve_all_comments: true,
+                    syntax: Some(Syntax::Typescript(TsConfig::default())),
+                    target: Some(EsVersion::Es2022),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        |_, _| noop(),
+        |_, _| my_visitor(),
+    );
 
-    fixer.apply()
+    result.unwrap().code
 }
 
-fn update_pattern(pattern: &Pattern, type_annotation: Option<&str>, fixer: &mut Fixer) {
-    for child in pattern.syntax().children() {
-        trace!("child: {child:?}");
+fn my_visitor() -> impl Fold {
+    as_folder(MyVisitor)
+}
+
+struct MyVisitor;
+impl VisitMut for MyVisitor {
+    fn visit_mut_param(&mut self, param: &mut Param) {
+        param.visit_mut_children_with(self);
+        update_pattern(&mut param.pat);
     }
 
-    match pattern {
-        Pattern::SinglePattern(single) if single.ty().is_none() => {
-            trace!("single: {single:?}");
-            if let Some(span) = single.name().map(|name| name.range()) {
-                fixer.insert_after(span, format!(": {}", type_annotation.unwrap_or("any")));
-            }
-        }
-        Pattern::RestPattern(_) => todo!(),
-        Pattern::AssignPattern(assign) if assign.ty().is_none() => {
-            // FIXME: AssignPattern.key() returns None so we work around it by querying the children instead. Should be Pattern::SinglePattern
-            let expression_type = Some(get_type_from_expression(assign.value()));
-            if let Some(name) = assign.syntax().child_with_ast::<Name>() {
-                fixer.insert_after(
-                    name.range(),
-                    format!(": {}", expression_type.unwrap_or("any")),
-                );
-            }
-        }
-        Pattern::ObjectPattern(obj) if obj.ty().is_none() => {
-            fixer.insert_after(
-                obj.range(),
-                format!(": {}", type_annotation.unwrap_or("any")),
-            );
-        }
-        Pattern::ArrayPattern(array) => {
-            debug!("array pattern: {:?}", array.text());
-        }
-        Pattern::ExprPattern(_) => todo!(),
-        _ => (),
+    fn visit_mut_var_declarator(&mut self, declarator: &mut VarDeclarator) {
+        declarator.visit_mut_children_with(self);
+        update_pattern(&mut declarator.name);
     }
 }
 
-fn get_type_from_expression<'a>(expr: Option<Expr>) -> &'a str {
-    trace!("expr: {expr:?}");
-    match expr {
-        Some(Expr::ArrayExpr(_)) => "any[]",
-        _ => "any"
-
-        // Expr::ArrowExpr(_) => todo!(),
-        // Expr::Literal(_) => todo!(),
-        // Expr::Template(_) => todo!(),
-        // Expr::NameRef(_) => todo!(),
-        // Expr::ThisExpr(_) => todo!(),
-        // Expr::ObjectExpr(_) => todo!(),
-        // Expr::GroupingExpr(_) => todo!(),
-        // Expr::BracketExpr(_) => todo!(),
-        // Expr::DotExpr(_) => todo!(),
-        // Expr::NewExpr(_) => todo!(),
-        // Expr::CallExpr(_) => todo!(),
-        // Expr::UnaryExpr(_) => todo!(),
-        // Expr::BinExpr(_) => todo!(),
-        // Expr::CondExpr(_) => todo!(),
-        // Expr::AssignExpr(_) => todo!(),
-        // Expr::SequenceExpr(_) => todo!(),
-        // Expr::FnExpr(_) => todo!(),
-        // Expr::ClassExpr(_) => todo!(),
-        // Expr::NewTarget(_) => todo!(),
-        // Expr::ImportMeta(_) => todo!(),
-        // Expr::SuperCall(_) => todo!(),
-        // Expr::ImportCall(_) => todo!(),
-        // Expr::YieldExpr(_) => todo!(),
-        // Expr::AwaitExpr(_) => todo!(),
-        // Expr::PrivatePropAccess(_) => todo!(),
-        // Expr::TsNonNull(_) => todo!(),
-        // Expr::TsAssertion(_) => todo!(),
-        // Expr::TsConstAssertion(_) => todo!(),
+fn update_pattern(pat: &mut Pat) {
+    match pat {
+        Pat::Ident(ref mut ident) => {
+            ident.type_ann = Some(create_any_type());
+        }
+        Pat::Array(_) => todo!(),
+        Pat::Rest(_) => todo!(),
+        Pat::Object(_) => todo!(),
+        Pat::Assign(_) => todo!(),
+        Pat::Invalid(_) => todo!(),
+        Pat::Expr(_) => todo!(),
     }
 }
 
-fn print_ast(root: &SyntaxNode) {
-    fn write_node(node: &SyntaxNode, depth: usize) {
-        let name = node.readable_stmt_name();
-        let spaces = " ".repeat(depth);
+fn create_any_type() -> TsTypeAnn {
+    let any_keyword = TsKeywordType {
+        span: Span::default(),
+        kind: TsKeywordTypeKind::TsAnyKeyword,
+    };
 
-        trace!(
-            "{spaces}{name} ({:?}) [{:?}-{:?}]",
-            &node.kind(),
-            &node.text_range().start(),
-            &node.text_range().end()
-        );
-
-        for child in node.children() {
-            write_node(&child, depth + 1);
-        }
+    TsTypeAnn {
+        span: Span::default(),
+        type_ann: Box::new(TsType::TsKeywordType(any_keyword)),
     }
-
-    write_node(root, 0);
 }
 
 #[cfg(test)]
@@ -146,7 +90,11 @@ mod tests {
         //     env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "trace"),
         // );
         let output = add_types(String::from(input));
-        assert_eq!(expected_output, output);
+        assert_eq!(
+            format!("{expected_output}\n"),
+            output,
+            "left is expected, right is output"
+        );
     }
 
     #[test]
@@ -171,6 +119,7 @@ mod tests {
     fn add_types_respects_whitespace() {
         compare(
             "
+// comment
 function foo(
     a,
     b,
@@ -180,6 +129,7 @@ function foo(
     console.log(test);
 }",
             "
+// comment
 function foo(
     a: any,
     b: any,
@@ -220,17 +170,13 @@ function foo(
     #[test]
     fn add_types_for_in() {
         compare(
-            "
-function foo() {          
-    for (const key in {}) {
+            "function foo() {
+    for(const key in {}) {
 
     }
 }",
-            "
-function foo() {          
-    for (const key in {}) {
-
-    }
+            "function foo() {
+    for(const key in {}){}
 }",
         );
     }
@@ -238,21 +184,19 @@ function foo() {
     #[test]
     fn add_types_export_default_function() {
         compare(
-            "export default function foo(route) { }",
-            "export default function foo(route: any) { }",
+            "export default function foo(route) {};",
+            "export default function foo(route: any) {};",
         );
     }
 
     #[test]
     fn add_types_class_function() {
         compare(
-            "
-class ColorPicker {
-  componentDidUpdate(prevProps, prevState) { }
+            "class ColorPicker {
+    componentDidUpdate(prevProps, prevState) {}
 }",
-            "
-class ColorPicker {
-  componentDidUpdate(prevProps: any, prevState: any) { }
+            "class ColorPicker {
+    componentDidUpdate(prevProps: any, prevState: any) {}
 }",
         );
     }
@@ -260,16 +204,16 @@ class ColorPicker {
     #[test]
     fn add_types_const_arrow_function() {
         compare(
-            "const mapStateToProps = (state, props) => { }",
-            "const mapStateToProps = (state: any, props: any) => { }",
+            "const mapStateToProps = (state, props) => {}",
+            "const mapStateToProps = (state: any, props: any) => {}",
         );
     }
 
     #[test]
     fn add_types_lambda() {
         compare(
-            "function foo() { sources.filter((v, k) => true; }",
-            "function foo() { sources.filter((v: any, k: any) => true; }",
+            "function foo() { sources.filter((v, k) => true ) };",
+            "function foo() { sources.filter((v: any, k: any) => true ) };",
         );
     }
 
@@ -294,7 +238,7 @@ function foo() {
     #[test]
     fn add_types_variable_uninitialized_let() {
         compare("let test;", "let test: any;");
-    }    
+    }
 
     #[test]
     fn add_types_variable_uninitialized_const() {
