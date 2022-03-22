@@ -1,3 +1,4 @@
+use log::trace;
 use swc::config::{Config, JscConfig, Options};
 use swc_common::errors::{ColorConfig, Handler};
 use swc_common::sync::Lrc;
@@ -15,17 +16,32 @@ pub fn add_types(contents: String) -> String {
     let file = cm.new_source_file(FileName::Custom("test.js".into()), String::from(contents));
     let compiler = swc::Compiler::new(cm.clone());
     let handler = Handler::with_tty_emitter(ColorConfig::Auto, true, false, Some(cm.clone()));
+    let target = EsVersion::Es2022;
+    let syntax = Syntax::Typescript(TsConfig::default());
+
+    let program = compiler
+        .parse_js(
+            file.clone(),
+            &handler,
+            target,
+            syntax,
+            swc::config::IsModule::Unknown,
+            None,
+        )
+        .expect("Failed to parse JS");
+
+    trace!("{program:?}");
 
     let result = compiler.process_js_with_custom_pass(
         file,
-        None,
+        Some(program),
         &handler,
         &Options {
             config: Config {
                 jsc: JscConfig {
                     preserve_all_comments: true,
-                    syntax: Some(Syntax::Typescript(TsConfig::default())),
-                    target: Some(EsVersion::Es2022),
+                    syntax: Some(syntax),
+                    target: Some(target),
                     ..Default::default()
                 },
                 ..Default::default()
@@ -69,8 +85,10 @@ fn update_pattern(pat: &mut Pat, with_type: Option<TsTypeAnn>) {
         }
         Pat::Array(_) => todo!(),
         Pat::Rest(_) => todo!(),
-        Pat::Object(_) => todo!(),
-        Pat::Assign(assign) => {
+        Pat::Object(object) if object.type_ann.is_none() => {
+            object.type_ann = Some(create_any_type());
+        }
+        Pat::Assign(assign) if assign.type_ann.is_none() => {
             let type_annotation = get_type_from_expression(&mut *assign.right);
             update_pattern(&mut assign.left, Some(type_annotation));
         }
@@ -113,13 +131,18 @@ fn create_array(element_type: TsTypeAnn) -> TsTypeAnn {
 }
 
 #[cfg(test)]
+#[ctor::ctor]
+fn init() {
+    env_logger::init_from_env(
+        env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "trace"),
+    );
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
     fn compare(input: &str, expected_output: &str) {
-        // env_logger::init_from_env(
-        //     env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "trace"),
-        // );
         let output = add_types(String::from(input));
         assert_eq!(
             format!("{expected_output}\n"),
@@ -193,8 +216,8 @@ function foo(
     #[test]
     fn add_types_destructured_parameter() {
         compare(
-            "function getRole({ permissions, user }) { }",
-            "function getRole({ permissions, user }: any) { }",
+            "function getRole({ permissions, user }) {}",
+            "function getRole({ permissions , user  }: any) {}",
         );
     }
 
