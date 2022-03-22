@@ -45,6 +45,10 @@ pub fn add_types(contents: String) -> String {
                         Some(Expr::NameRef(name_ref)) if name_ref.text() == "undefined" => {
                             update_pattern(pattern, None, &mut fixer)
                         }
+                        array @ Some(Expr::ArrayExpr(_)) => {
+                            let type_annotation = get_type_from_expression(array);
+                            update_pattern(pattern, Some(type_annotation), &mut fixer)
+                        }
                         _ => (),
                     },
                     _ => (),
