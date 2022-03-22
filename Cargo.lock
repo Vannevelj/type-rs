@@ -545,6 +545,7 @@ dependencies = [
 name = "type-rs"
 version = "0.1.0"
 dependencies = [
+ "ctor",
  "env_logger",
  "log",
  "rslint_core",

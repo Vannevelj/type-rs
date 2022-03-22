@@ -138,13 +138,18 @@ fn print_ast(root: &SyntaxNode) {
 }
 
 #[cfg(test)]
+#[ctor::ctor]
+fn init() {
+    env_logger::init_from_env(
+        env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "trace"),
+    );
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
     fn compare(input: &str, expected_output: &str) {
-        // env_logger::init_from_env(
-        //     env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "trace"),
-        // );
         let output = add_types(String::from(input));
         assert_eq!(expected_output, output);
     }
