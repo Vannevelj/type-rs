@@ -19,7 +19,6 @@ pub fn add_types(contents: String) -> String {
             SyntaxKind::PARAMETER_LIST => {
                 let param_list = descendant.to::<ParameterList>();
                 for param in param_list.parameters() {
-                    debug!("Updating pattern");
                     update_pattern(&param, None, &mut fixer);
                 }
             }
@@ -295,12 +294,7 @@ function foo() {
     #[test]
     fn add_types_variable_uninitialized_let() {
         compare("let test;", "let test: any;");
-    }
-
-    #[test]
-    fn add_types_variable_uninitialized_multi() {
-        compare("let test, test2;", "let test: any, test2: any;");
-    }
+    }    
 
     #[test]
     fn add_types_variable_uninitialized_const() {
@@ -310,5 +304,39 @@ function foo() {
     #[test]
     fn add_types_variable_uninitialized_var() {
         compare("var test;", "var test: any;");
+    }
+
+    #[test]
+    fn add_types_variable_uninitialized_multi() {
+        compare("let test, test2;", "let test: any, test2: any;");
+    }
+
+    #[test]
+    fn add_types_variable_initialized_ambiguous_null() {
+        compare("let test = null;", "let test: any = null;");
+    }
+
+    #[test]
+    fn add_types_variable_initialized_ambiguous_undefined() {
+        compare("let test = undefined;", "let test: any = undefined;");
+    }
+
+    #[test]
+    fn add_types_variable_initialized_ambiguous_array() {
+        compare("let test = [];", "let test: any[] = [];");
+    }
+
+    #[test]
+    fn add_types_callback_arg() {
+        compare(
+            "return (
+<Component
+    onClick={() => this.toggleSelection(entity)}
+/>);",
+            "return (
+<Component
+    onClick={() => this.toggleSelection(entity)}
+/>);",
+        );
     }
 }
