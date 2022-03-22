@@ -35,17 +35,18 @@ pub fn add_types(contents: String) -> String {
                 debug!("declarator.value: {:?}", declarator.value());
                 debug!("declarator.pattern: {:?}", declarator.pattern());
 
-                match (declarator.value(), declarator.pattern()) {
-                    (None, Some(ref pattern)) => update_pattern(pattern, None, &mut fixer),
-                    (literal @ Some(Expr::Literal(_)), Some(ref pattern)) => {
-                        let type_annotation = get_type_from_expression(literal);
-                        update_pattern(pattern, Some(type_annotation), &mut fixer)
-                    }
-                    (Some(Expr::NameRef(name_ref)), Some(ref pattern))
-                        if name_ref.text() == "undefined" =>
-                    {
-                        update_pattern(pattern, None, &mut fixer)
-                    }
+                match declarator.pattern() {
+                    Some(ref pattern) => match declarator.value() {
+                        None => update_pattern(pattern, None, &mut fixer),
+                        literal @ Some(Expr::Literal(_)) => {
+                            let type_annotation = get_type_from_expression(literal);
+                            update_pattern(pattern, Some(type_annotation), &mut fixer)
+                        }
+                        Some(Expr::NameRef(name_ref)) if name_ref.text() == "undefined" => {
+                            update_pattern(pattern, None, &mut fixer)
+                        }
+                        _ => (),
+                    },
                     _ => (),
                 }
             }
