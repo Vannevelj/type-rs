@@ -3,7 +3,8 @@ use swc_common::errors::{ColorConfig, Handler};
 use swc_common::sync::Lrc;
 use swc_common::{FileName, SourceMap, Span};
 use swc_ecma_ast::{
-    EsVersion, Param, Pat, TsKeywordType, TsKeywordTypeKind, TsType, TsTypeAnn, VarDeclarator,
+    EsVersion, Expr, Param, Pat, TsArrayType, TsKeywordType, TsKeywordTypeKind, TsType, TsTypeAnn,
+    VarDeclarator,
 };
 use swc_ecma_parser::{Syntax, TsConfig};
 use swc_ecma_transforms::pass::noop;
@@ -46,26 +47,44 @@ struct MyVisitor;
 impl VisitMut for MyVisitor {
     fn visit_mut_param(&mut self, param: &mut Param) {
         param.visit_mut_children_with(self);
-        update_pattern(&mut param.pat);
+        update_pattern(&mut param.pat, None);
     }
 
     fn visit_mut_var_declarator(&mut self, declarator: &mut VarDeclarator) {
         declarator.visit_mut_children_with(self);
-        update_pattern(&mut declarator.name);
+        let type_ann = declarator
+            .init
+            .as_mut()
+            .map(|initializer| get_type_from_expression(&mut *initializer));
+        update_pattern(&mut declarator.name, type_ann);
     }
 }
 
-fn update_pattern(pat: &mut Pat) {
+fn update_pattern(pat: &mut Pat, with_type: Option<TsTypeAnn>) {
+    let with_type = with_type.unwrap_or_else(create_any_type);
+
     match pat {
-        Pat::Ident(ref mut ident) => {
-            ident.type_ann = Some(create_any_type());
+        Pat::Ident(ref mut ident) if ident.type_ann.is_none() => {
+            ident.type_ann = Some(with_type);
         }
         Pat::Array(_) => todo!(),
         Pat::Rest(_) => todo!(),
         Pat::Object(_) => todo!(),
-        Pat::Assign(_) => todo!(),
+        Pat::Assign(assign) => {
+            let type_annotation = get_type_from_expression(&mut *assign.right);
+            update_pattern(&mut assign.left, Some(type_annotation));
+        }
         Pat::Invalid(_) => todo!(),
         Pat::Expr(_) => todo!(),
+        _ => (),
+    }
+}
+
+fn get_type_from_expression(expr: &mut Expr) -> TsTypeAnn {
+    match expr {
+        Expr::Array(ref array) => create_array(create_any_type()),
+        //Expr::Lit(_) => (),
+        _ => create_any_type(),
     }
 }
 
@@ -78,6 +97,18 @@ fn create_any_type() -> TsTypeAnn {
     TsTypeAnn {
         span: Span::default(),
         type_ann: Box::new(TsType::TsKeywordType(any_keyword)),
+    }
+}
+
+fn create_array(element_type: TsTypeAnn) -> TsTypeAnn {
+    let array_keyword = TsArrayType {
+        span: Span::default(),
+        elem_type: element_type.type_ann,
+    };
+
+    TsTypeAnn {
+        span: Span::default(),
+        type_ann: Box::new(TsType::TsArrayType(array_keyword)),
     }
 }
 
