@@ -35,8 +35,8 @@ pub fn add_types(contents: String) -> String {
                 debug!("declarator.value: {:?}", declarator.value());
                 debug!("declarator.pattern: {:?}", declarator.pattern());
 
-                match declarator.pattern() {
-                    Some(ref pattern) => match declarator.value() {
+                if let Some(ref pattern) = declarator.pattern() {
+                    match declarator.value() {
                         None => update_pattern(pattern, None, &mut fixer),
                         literal @ Some(Expr::Literal(_)) => {
                             let type_annotation = get_type_from_expression(literal);
@@ -50,8 +50,7 @@ pub fn add_types(contents: String) -> String {
                             update_pattern(pattern, Some(type_annotation), &mut fixer)
                         }
                         _ => (),
-                    },
-                    _ => (),
+                    }
                 }
             }
             _ => continue,
