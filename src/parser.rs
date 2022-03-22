@@ -349,6 +349,7 @@ function foo() {
     }
 
     #[test]
+    #[ignore = "rslint does not support parsing JSX"]
     fn add_types_callback_arg() {
         compare(
             "return (
