@@ -33,6 +33,10 @@ pub fn add_types(contents: String) -> String {
                 }
                 match (declarator.value(), declarator.pattern()) {
                     (None, Some(ref pattern)) => update_pattern(pattern, None, &mut fixer),
+                    (literal @ Some(Expr::Literal(_)), Some(ref pattern)) => {
+                        let type_annotation = get_type_from_expression(literal);
+                        update_pattern(pattern, Some(type_annotation), &mut fixer)
+                    }
                     _ => (),
                 }
             }
@@ -299,7 +303,7 @@ function foo() {
     #[test]
     fn add_types_variable_uninitialized_let() {
         compare("let test;", "let test: any;");
-    }    
+    }
 
     #[test]
     fn add_types_variable_uninitialized_const() {
