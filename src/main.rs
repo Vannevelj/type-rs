@@ -1,21 +1,25 @@
+mod options;
 mod parser;
 
-use std::path::{Path, PathBuf};
-use std::{fs, thread};
-
 use log::{debug, error, info, warn};
+use std::path::PathBuf;
+use std::{fs, thread};
+use structopt::StructOpt;
 
+use crate::options::Options;
 use crate::parser::add_types;
 
 fn main() {
     env_logger::init_from_env(
-        env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "debug"),
+        env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"),
     );
 
-    let path = Path::new("C:\\source\\hudl-videospa\\src\\client-app\\app").to_path_buf();
-    traverse_directories(path);
+    let args = Options::from_args();
+    info!("Starting now at {:?}", &args.path);
 
-    println!("Finished conversion!")
+    traverse_directories(args.path);
+
+    info!("Finished conversion!")
 }
 
 fn traverse_directories(path: PathBuf) {
@@ -69,7 +73,7 @@ fn handle_file(path: PathBuf, file_name: String, extension: &str) {
 
             let new_source = add_types(contents);
             let new_path = path.with_file_name(format!("{file_name}.{extension}"));
-            info!("Writing new file at {new_path:?}");
+            debug!("Writing new file at {new_path:?}");
             fs::write(new_path, new_source).expect("Unable to write file");
             fs::remove_file(path).expect("Failed to delete file");
         }

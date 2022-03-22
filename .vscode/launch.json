@@ -9,7 +9,7 @@
             "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceRoot}/target/debug/type-rs.exe",
-            "args": [],
+            "args": ["C:\\source\\hudl-videospa\\src\\client-app\\app"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
