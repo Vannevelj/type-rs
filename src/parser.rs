@@ -127,6 +127,7 @@ fn get_type_from_expression(expr: Option<Expr>) -> Option<String> {
             }
         }
         Some(Expr::CallExpr(_)) => None,
+        Some(Expr::NewExpr(_)) => None,
         _ => Some(String::from("any"))
 
         // Expr::ArrowExpr(_) => todo!(),
@@ -137,7 +138,7 @@ fn get_type_from_expression(expr: Option<Expr>) -> Option<String> {
         // Expr::GroupingExpr(_) => todo!(),
         // Expr::BracketExpr(_) => todo!(),
         // Expr::DotExpr(_) => todo!(),
-        // Expr::NewExpr(_) => todo!(),
+        // ,
         
         // Expr::UnaryExpr(_) => todo!(),
         // Expr::BinExpr(_) => todo!(),
