@@ -66,7 +66,7 @@ fn update_pattern(pattern: &Pattern, fixer: &mut Fixer) {
             if let Some(span) = single.name().map(|name| name.range()) {
                 if let Some(type_annotation) = get_type_from_expression(None) {
                     fixer.insert_after(span, format!(": {}", type_annotation));
-                }                
+                }
             }
         }
         Pattern::RestPattern(_) => todo!(),
@@ -76,12 +76,12 @@ fn update_pattern(pattern: &Pattern, fixer: &mut Fixer) {
                 if let Some(name) = assign.syntax().child_with_ast::<Name>() {
                     fixer.insert_after(name.range(), format!(": {}", type_annotation));
                 }
-            }            
+            }
         }
         Pattern::ObjectPattern(obj) if obj.ty().is_none() => {
             if let Some(type_annotation) = get_type_from_expression(None) {
                 fixer.insert_after(obj.range(), format!(": {}", type_annotation));
-            }            
+            }
         }
         Pattern::ArrayPattern(array) => {
             debug!("array pattern: {:?}", array.text());
@@ -110,7 +110,6 @@ fn get_type_from_expression(expr: Option<Expr>) -> Option<String> {
                         }
                         None => return None
                     }
-                    
                 }
             }
 
@@ -127,7 +126,7 @@ fn get_type_from_expression(expr: Option<Expr>) -> Option<String> {
             }
         }
         Some(Expr::ObjectExpr(_)) | None => Some(String::from("any")),
-        Some(Expr::NameRef(nr)) if nr.text() == "undefined" =>Some(String::from("any")), 
+        Some(Expr::NameRef(nr)) if nr.text() == "undefined" => Some(String::from("any")), 
         _ => None
 
         // Expr::ArrowExpr(_) => todo!(),
@@ -137,8 +136,6 @@ fn get_type_from_expression(expr: Option<Expr>) -> Option<String> {
         // Expr::GroupingExpr(_) => todo!(),
         // Expr::BracketExpr(_) => todo!(),
         // Expr::DotExpr(_) => todo!(),
-        // ,
-        
         // Expr::UnaryExpr(_) => todo!(),
         // Expr::BinExpr(_) => todo!(),
         // Expr::CondExpr(_) => todo!(),
