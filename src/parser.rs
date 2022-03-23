@@ -1,7 +1,10 @@
 use log::{debug, trace};
 use rslint_core::autofix::Fixer;
 use rslint_parser::{
-    ast::{Declarator, Expr, ForStmtInit, Name, ParameterList, Pattern, LiteralKind},
+    ast::{
+        Declarator, Expr, ExprOrSpread, ForStmtInit, Literal, LiteralKind, Name, ParameterList,
+        Pattern,
+    },
     parse_with_syntax, AstNode, Syntax, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
 use std::sync::Arc;
@@ -38,17 +41,12 @@ pub fn add_types(contents: String) -> String {
                 if let Some(ref pattern) = declarator.pattern() {
                     match declarator.value() {
                         None => update_pattern(pattern, None, &mut fixer),
-                        literal @ Some(Expr::Literal(_)) => {
-                            let type_annotation = get_type_from_expression(literal);
-                            update_pattern(pattern, Some(type_annotation), &mut fixer)
-                        }
-                        Some(Expr::NameRef(name_ref)) if name_ref.text() == "undefined" => {
+                        Some(Expr::Literal(literal)) if literal.is_null() => {
                             update_pattern(pattern, None, &mut fixer)
                         }
-                        array @ Some(Expr::ArrayExpr(_)) => {
-                            let type_annotation = get_type_from_expression(array);
-                            update_pattern(pattern, Some(type_annotation), &mut fixer)
-                        }
+                        // Some(Expr::NameRef(name_ref)) if name_ref.text() == "undefined" => {
+                        //     update_pattern(pattern, None, &mut fixer)
+                        // }
                         _ => (),
                     }
                 }
@@ -60,7 +58,7 @@ pub fn add_types(contents: String) -> String {
     fixer.apply()
 }
 
-fn update_pattern(pattern: &Pattern, type_annotation: Option<&str>, fixer: &mut Fixer) {
+fn update_pattern(pattern: &Pattern, type_annotation: Option<String>, fixer: &mut Fixer) {
     for child in pattern.syntax().children() {
         trace!("child: {child:?}");
     }
@@ -69,7 +67,10 @@ fn update_pattern(pattern: &Pattern, type_annotation: Option<&str>, fixer: &mut 
         Pattern::SinglePattern(single) if single.ty().is_none() => {
             trace!("single: {single:?}");
             if let Some(span) = single.name().map(|name| name.range()) {
-                fixer.insert_after(span, format!(": {}", type_annotation.unwrap_or("any")));
+                fixer.insert_after(
+                    span,
+                    format!(": {}", type_annotation.unwrap_or(String::from("any"))),
+                );
             }
         }
         Pattern::RestPattern(_) => todo!(),
@@ -79,14 +80,14 @@ fn update_pattern(pattern: &Pattern, type_annotation: Option<&str>, fixer: &mut 
             if let Some(name) = assign.syntax().child_with_ast::<Name>() {
                 fixer.insert_after(
                     name.range(),
-                    format!(": {}", expression_type.unwrap_or("any")),
+                    format!(": {}", expression_type.unwrap_or(String::from("any"))),
                 );
             }
         }
         Pattern::ObjectPattern(obj) if obj.ty().is_none() => {
             fixer.insert_after(
                 obj.range(),
-                format!(": {}", type_annotation.unwrap_or("any")),
+                format!(": {}", type_annotation.unwrap_or(String::from("any"))),
             );
         }
         Pattern::ArrayPattern(array) => {
@@ -97,21 +98,35 @@ fn update_pattern(pattern: &Pattern, type_annotation: Option<&str>, fixer: &mut 
     }
 }
 
-fn get_type_from_expression<'a>(expr: Option<Expr>) -> &'a str {
+fn get_type_from_expression(expr: Option<Expr>) -> String {
     trace!("expr: {expr:?}");
     match expr {
-        Some(Expr::ArrayExpr(_)) => "any[]",
+        Some(Expr::ArrayExpr(array)) => {
+            let default_return = String::from("any[]");
+            let mut found_type = None;
+            for element in array.elements() {
+                if let ExprOrSpread::Expr(expr) = element {
+                    let element_type = get_type_from_expression(Some(expr));
+                    match found_type {
+                        Some(t) if t != element_type => return default_return,
+                        _ => found_type = Some(format!("{element_type}[]"))
+                    }
+                }
+            }
+
+            found_type.unwrap_or(default_return)
+        },
         Some(Expr::Literal(literal)) => {
             match literal.kind() {
-                LiteralKind::Number(_) => "number",
-                LiteralKind::BigInt(_) => "BigInt",
-                LiteralKind::String => "string",
-                LiteralKind::Null => "any",
-                LiteralKind::Bool(_) => "boolean",
-                LiteralKind::Regex => "RegExp",
+                LiteralKind::Number(_) => String::from("number"),
+                LiteralKind::BigInt(_) => String::from("BigInt"),
+                LiteralKind::String => String::from("string"),
+                LiteralKind::Null => String::from("any"),
+                LiteralKind::Bool(_) => String::from("boolean"),
+                LiteralKind::Regex => String::from("RegExp"),
             }
         }
-        _ => "any"
+        _ => String::from("any")
 
         // Expr::ArrowExpr(_) => todo!(),
         // Expr::Template(_) => todo!(),
@@ -192,7 +207,10 @@ mod tests {
 
     #[test]
     fn add_types_function_default_value_string() {
-        compare("function foo(a = \"hey\") {}", "function foo(a: string = \"hey\") {}");
+        compare(
+            "function foo(a = \"hey\") {}",
+            "function foo(a: string = \"hey\") {}",
+        );
     }
 
     #[test]
@@ -206,38 +224,91 @@ mod tests {
     }
 
     #[test]
+    fn add_types_function_default_value_array_string() {
+        compare(
+            "function foo(a = [\"s1\"]) {}",
+            "function foo(a: string[] = [\"s1\"]) {}",
+        );
+    }
+
+    #[test]
+    fn add_types_function_default_value_array_number() {
+        compare(
+            "function foo(a = [1]) {}",
+            "function foo(a: number[] = [1]) {}",
+        );
+    }
+
+    #[test]
+    fn add_types_function_default_value_array_mixed() {
+        compare(
+            "function foo(a = [\"s1\", 1]) {}",
+            "function foo(a: any[] = [\"s1\", 1]) {}",
+        );
+    }
+
+    #[test]
+    fn add_types_function_default_value_array_mixed_null() {
+        compare(
+            "function foo(a = [1, null]) {}",
+            "function foo(a: any[] = [1, null]) {}",
+        );
+    }
+
+    #[test]
     fn add_types_function_default_value_null() {
-        compare("function foo(a = null) {}", "function foo(a: any = null) {}");
+        compare(
+            "function foo(a = null) {}",
+            "function foo(a: any = null) {}",
+        );
     }
 
     #[test]
     fn add_types_function_default_value_undefined() {
-        compare("function foo(a = undefined) {}", "function foo(a: any = undefined) {}");
+        compare(
+            "function foo(a = undefined) {}",
+            "function foo(a: any = undefined) {}",
+        );
     }
 
     #[test]
     fn add_types_function_default_value_regex() {
-        compare("function foo(a = /.*/) {}", "function foo(a: RegExp = /.*/) {}");
+        compare(
+            "function foo(a = /.*/) {}",
+            "function foo(a: RegExp = /.*/) {}",
+        );
     }
 
     #[test]
     fn add_types_function_default_value_bigint_suffix() {
-        compare("function foo(a = 9007199254740991n) {}", "function foo(a: BigInt = 9007199254740991n) {}");
+        compare(
+            "function foo(a = 9007199254740991n) {}",
+            "function foo(a: BigInt = 9007199254740991n) {}",
+        );
     }
 
     #[test]
     fn add_types_function_default_value_bigint_ctor() {
-        compare("function foo(a = BigInt(9007199254740991)) {}", "function foo(a: BigInt = BigInt(9007199254740991)) {}");
+        compare(
+            "function foo(a = BigInt(9007199254740991)) {}",
+            "function foo(a: BigInt = BigInt(9007199254740991)) {}",
+        );
     }
 
     #[test]
     fn add_types_function_default_value_bool() {
-        compare("function foo(a = true) {}", "function foo(a: boolean = true) {}");
+        compare(
+            "function foo(a = true) {}",
+            "function foo(a: boolean = true) {}",
+        );
     }
 
     #[test]
     fn add_types_function_default_value_date() {
-        compare("function foo(a = new Date()) {}", "function foo(a: Date = new Date()) {}");
+        compare(
+            "function foo(a = new Date()) {}",
+            "function foo(a: Date = new Date()) {}",
+        );
     }
 
     #[test]
@@ -270,7 +341,7 @@ function foo(
     console.log(test);
 }",
         );
-    }    
+    }
 
     #[test]
     fn add_types_preexisting_type() {
@@ -398,8 +469,13 @@ function foo() {
     }
 
     #[test]
-    fn add_types_variable_initialized_ambiguous_array() {
-        compare("let test = [];", "let test: any[] = [];");
+    fn add_types_variable_initialized_array_variable_untouched() {
+        compare("let test = [];", "let test = [];");
+    }
+
+    #[test]
+    fn add_types_variable_initialized_variable_number_untouched() {
+        compare("let test = 5;", "let test = 5;");
     }
 
     #[test]
