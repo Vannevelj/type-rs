@@ -1,7 +1,7 @@
 use log::{debug, trace};
 use rslint_core::autofix::Fixer;
 use rslint_parser::{
-    ast::{Declarator, Expr, ForStmtInit, Name, ParameterList, Pattern},
+    ast::{Declarator, Expr, ForStmtInit, Name, ParameterList, Pattern, LiteralKind},
     parse_with_syntax, AstNode, Syntax, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
 use std::sync::Arc;
@@ -101,10 +101,19 @@ fn get_type_from_expression<'a>(expr: Option<Expr>) -> &'a str {
     trace!("expr: {expr:?}");
     match expr {
         Some(Expr::ArrayExpr(_)) => "any[]",
+        Some(Expr::Literal(literal)) => {
+            match literal.kind() {
+                LiteralKind::Number(_) => "number",
+                LiteralKind::BigInt(_) => "BigInt",
+                LiteralKind::String => "string",
+                LiteralKind::Null => "any",
+                LiteralKind::Bool(_) => "boolean",
+                LiteralKind::Regex => "RegExp",
+            }
+        }
         _ => "any"
 
         // Expr::ArrowExpr(_) => todo!(),
-        // Expr::Literal(_) => todo!(),
         // Expr::Template(_) => todo!(),
         // Expr::NameRef(_) => todo!(),
         // Expr::ThisExpr(_) => todo!(),
@@ -177,8 +186,58 @@ mod tests {
     }
 
     #[test]
-    fn add_types_function_default_value() {
-        compare("function foo(a = 5) {}", "function foo(a: any = 5) {}");
+    fn add_types_function_default_value_number() {
+        compare("function foo(a = 5) {}", "function foo(a: number = 5) {}");
+    }
+
+    #[test]
+    fn add_types_function_default_value_string() {
+        compare("function foo(a = \"hey\") {}", "function foo(a: string = \"hey\") {}");
+    }
+
+    #[test]
+    fn add_types_function_default_value_object() {
+        compare("function foo(a = {}) {}", "function foo(a: any = {}) {}");
+    }
+
+    #[test]
+    fn add_types_function_default_value_array() {
+        compare("function foo(a = []) {}", "function foo(a: any[] = []) {}");
+    }
+
+    #[test]
+    fn add_types_function_default_value_null() {
+        compare("function foo(a = null) {}", "function foo(a: any = null) {}");
+    }
+
+    #[test]
+    fn add_types_function_default_value_undefined() {
+        compare("function foo(a = undefined) {}", "function foo(a: any = undefined) {}");
+    }
+
+    #[test]
+    fn add_types_function_default_value_regex() {
+        compare("function foo(a = /.*/) {}", "function foo(a: RegExp = /.*/) {}");
+    }
+
+    #[test]
+    fn add_types_function_default_value_bigint_suffix() {
+        compare("function foo(a = 9007199254740991n) {}", "function foo(a: BigInt = 9007199254740991n) {}");
+    }
+
+    #[test]
+    fn add_types_function_default_value_bigint_ctor() {
+        compare("function foo(a = BigInt(9007199254740991)) {}", "function foo(a: BigInt = BigInt(9007199254740991)) {}");
+    }
+
+    #[test]
+    fn add_types_function_default_value_bool() {
+        compare("function foo(a = true) {}", "function foo(a: boolean = true) {}");
+    }
+
+    #[test]
+    fn add_types_function_default_value_date() {
+        compare("function foo(a = new Date()) {}", "function foo(a: Date = new Date()) {}");
     }
 
     #[test]
@@ -211,12 +270,7 @@ function foo(
     console.log(test);
 }",
         );
-    }
-
-    #[test]
-    fn add_types_array_function_default_value() {
-        compare("function foo(a = []) {}", "function foo(a: any[] = []) {}");
-    }
+    }    
 
     #[test]
     fn add_types_preexisting_type() {
