@@ -44,9 +44,9 @@ pub fn add_types(contents: String) -> String {
                         Some(Expr::Literal(literal)) if literal.is_null() => {
                             update_pattern(pattern, None, &mut fixer)
                         }
-                        // Some(Expr::NameRef(name_ref)) if name_ref.text() == "undefined" => {
-                        //     update_pattern(pattern, None, &mut fixer)
-                        // }
+                        Some(Expr::NameRef(name_ref)) if name_ref.text() == "undefined" => {
+                            update_pattern(pattern, None, &mut fixer)
+                        }
                         _ => (),
                     }
                 }
