@@ -1,10 +1,7 @@
 use log::{debug, trace};
 use rslint_core::autofix::Fixer;
 use rslint_parser::{
-    ast::{
-        Declarator, Expr, ExprOrSpread, ForStmtInit, Literal, LiteralKind, Name, ParameterList,
-        Pattern,
-    },
+    ast::{Declarator, Expr, ExprOrSpread, ForStmtInit, LiteralKind, Name, ParameterList, Pattern},
     parse_with_syntax, AstNode, Syntax, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
 use std::sync::Arc;
@@ -69,7 +66,10 @@ fn update_pattern(pattern: &Pattern, type_annotation: Option<String>, fixer: &mu
             if let Some(span) = single.name().map(|name| name.range()) {
                 fixer.insert_after(
                     span,
-                    format!(": {}", type_annotation.unwrap_or(String::from("any"))),
+                    format!(
+                        ": {}",
+                        type_annotation.unwrap_or_else(|| String::from("any"))
+                    ),
                 );
             }
         }
@@ -80,14 +80,20 @@ fn update_pattern(pattern: &Pattern, type_annotation: Option<String>, fixer: &mu
             if let Some(name) = assign.syntax().child_with_ast::<Name>() {
                 fixer.insert_after(
                     name.range(),
-                    format!(": {}", expression_type.unwrap_or(String::from("any"))),
+                    format!(
+                        ": {}",
+                        expression_type.unwrap_or_else(|| String::from("any"))
+                    ),
                 );
             }
         }
         Pattern::ObjectPattern(obj) if obj.ty().is_none() => {
             fixer.insert_after(
                 obj.range(),
-                format!(": {}", type_annotation.unwrap_or(String::from("any"))),
+                format!(
+                    ": {}",
+                    type_annotation.unwrap_or_else(|| String::from("any"))
+                ),
             );
         }
         Pattern::ArrayPattern(array) => {
