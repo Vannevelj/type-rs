@@ -1,7 +1,10 @@
 use log::{debug, trace};
 use rslint_core::autofix::Fixer;
 use rslint_parser::{
-    ast::{Declarator, Expr, ExprOrSpread, ForStmtInit, LiteralKind, Name, ParameterList, Pattern},
+    ast::{
+        CatchClause, Declarator, Expr, ExprOrSpread, ForStmtInit, LiteralKind, Name, ParameterList,
+        Pattern,
+    },
     parse_with_syntax, AstNode, Syntax, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
 use std::sync::Arc;
@@ -46,6 +49,12 @@ pub fn add_types(contents: String) -> String {
                         }
                         _ => (),
                     }
+                }
+            }
+            SyntaxKind::CATCH_CLAUSE => {
+                let catch = descendant.to::<CatchClause>();
+                if let Some(pattern) = catch.error() {
+                    update_pattern(&pattern, &mut fixer);
                 }
             }
             _ => continue,
@@ -488,6 +497,28 @@ function foo() {
 <Component
     onClick={() => this.toggleSelection(entity)}
 />);",
+        );
+    }
+
+    #[test]
+    fn add_types_try_catch() {
+        compare(
+            "
+fn foo() {
+ try {
+     // thing
+ } catch (err) {
+     // log
+ }
+}",
+            "
+fn foo() {
+ try {
+     // thing
+ } catch (err: any) {
+     // log
+ }
+}",
         );
     }
 }
