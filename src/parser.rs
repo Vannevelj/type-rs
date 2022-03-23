@@ -114,6 +114,7 @@ fn get_type_from_expression(expr: Option<Expr>) -> String {
                 if let ExprOrSpread::Expr(expr) = element {
                     let element_type = get_type_from_expression(Some(expr));
                     match found_type {
+                        // FIXME: we can make this smarter by constructing a union type, e.g. `(string | number)[]`
                         Some(t) if t != element_type => return default_return,
                         _ => found_type = Some(format!("{element_type}[]"))
                     }
