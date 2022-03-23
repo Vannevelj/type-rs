@@ -44,7 +44,7 @@ fn traverse_directories(path: PathBuf) {
                 _ => return,
             };
 
-            debug!("Processing {:?}", file_name);
+            info!("Processing {:?}", file_name);
 
             thread::spawn(move || handle_file(path, file_name, target_extension));
             return;
