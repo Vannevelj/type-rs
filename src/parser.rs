@@ -64,21 +64,24 @@ fn update_pattern(pattern: &Pattern, fixer: &mut Fixer) {
         Pattern::SinglePattern(single) if single.ty().is_none() => {
             trace!("single: {single:?}");
             if let Some(span) = single.name().map(|name| name.range()) {
-                let type_annotation = get_type_from_expression(None);
-                fixer.insert_after(span, format!(": {}", type_annotation));
+                if let Some(type_annotation) = get_type_from_expression(None) {
+                    fixer.insert_after(span, format!(": {}", type_annotation));
+                }                
             }
         }
         Pattern::RestPattern(_) => todo!(),
         Pattern::AssignPattern(assign) if assign.ty().is_none() => {
             // FIXME: AssignPattern.key() returns None so we work around it by querying the children instead. Should be Pattern::SinglePattern
-            let type_annotation = get_type_from_expression(assign.value());
-            if let Some(name) = assign.syntax().child_with_ast::<Name>() {
-                fixer.insert_after(name.range(), format!(": {}", type_annotation));
-            }
+            if let Some(type_annotation) = get_type_from_expression(assign.value()) {
+                if let Some(name) = assign.syntax().child_with_ast::<Name>() {
+                    fixer.insert_after(name.range(), format!(": {}", type_annotation));
+                }
+            }            
         }
         Pattern::ObjectPattern(obj) if obj.ty().is_none() => {
-            let type_annotation = get_type_from_expression(None);
-            fixer.insert_after(obj.range(), format!(": {}", type_annotation));
+            if let Some(type_annotation) = get_type_from_expression(None) {
+                fixer.insert_after(obj.range(), format!(": {}", type_annotation));
+            }            
         }
         Pattern::ArrayPattern(array) => {
             debug!("array pattern: {:?}", array.text());
@@ -88,36 +91,43 @@ fn update_pattern(pattern: &Pattern, fixer: &mut Fixer) {
     }
 }
 
-fn get_type_from_expression(expr: Option<Expr>) -> String {
+fn get_type_from_expression(expr: Option<Expr>) -> Option<String> {
     trace!("expr: {expr:?}");
     match expr {
         Some(Expr::ArrayExpr(array)) => {
-            let default_return = String::from("any[]");
+            let default_return = Some(String::from("any[]"));
             let mut found_type = None;
             for element in array.elements() {
                 if let ExprOrSpread::Expr(expr) = element {
-                    let element_type = get_type_from_expression(Some(expr));
-                    match found_type {
-                        // FIXME: we can make this smarter by constructing a union type, e.g. `(string | number)[]`
-                        Some(t) if t != element_type => return default_return,
-                        _ => found_type = Some(format!("{element_type}[]"))
+                    let expression_type = get_type_from_expression(Some(expr));
+                    match expression_type {
+                        Some(element_type) => {
+                            match found_type {
+                                // FIXME: we can make this smarter by constructing a union type, e.g. `(string | number)[]`
+                                Some(t) if t != element_type => return default_return,
+                                _ => found_type = Some(format!("{}[]", element_type))
+                            }
+                        }
+                        None => return None
                     }
+                    
                 }
             }
 
-            found_type.unwrap_or(default_return)
+            found_type.or(default_return)
         },
         Some(Expr::Literal(literal)) => {
             match literal.kind() {
-                LiteralKind::Number(_) => String::from("number"),
-                LiteralKind::BigInt(_) => String::from("BigInt"),
-                LiteralKind::String => String::from("string"),
-                LiteralKind::Null => String::from("any"),
-                LiteralKind::Bool(_) => String::from("boolean"),
-                LiteralKind::Regex => String::from("RegExp"),
+                LiteralKind::Number(_) => Some(String::from("number")),
+                LiteralKind::BigInt(_) => Some(String::from("BigInt")),
+                LiteralKind::String => Some(String::from("string")),
+                LiteralKind::Null => Some(String::from("any")),
+                LiteralKind::Bool(_) => Some(String::from("boolean")),
+                LiteralKind::Regex => Some(String::from("RegExp")),
             }
         }
-        _ => String::from("any")
+        Some(Expr::CallExpr(_)) => None,
+        _ => Some(String::from("any"))
 
         // Expr::ArrowExpr(_) => todo!(),
         // Expr::Template(_) => todo!(),
@@ -128,7 +138,7 @@ fn get_type_from_expression(expr: Option<Expr>) -> String {
         // Expr::BracketExpr(_) => todo!(),
         // Expr::DotExpr(_) => todo!(),
         // Expr::NewExpr(_) => todo!(),
-        // Expr::CallExpr(_) => todo!(),
+        
         // Expr::UnaryExpr(_) => todo!(),
         // Expr::BinExpr(_) => todo!(),
         // Expr::CondExpr(_) => todo!(),
@@ -282,7 +292,7 @@ mod tests {
     fn add_types_function_default_value_bigint_ctor() {
         compare(
             "function foo(a = BigInt(9007199254740991)) {}",
-            "function foo(a: BigInt = BigInt(9007199254740991)) {}",
+            "function foo(a = BigInt(9007199254740991)) {}",
         );
     }
 
@@ -298,7 +308,7 @@ mod tests {
     fn add_types_function_default_value_date() {
         compare(
             "function foo(a = new Date()) {}",
-            "function foo(a: Date = new Date()) {}",
+            "function foo(a = new Date()) {}",
         );
     }
 
