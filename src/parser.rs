@@ -22,7 +22,7 @@ pub fn add_types(contents: String) -> String {
             SyntaxKind::PARAMETER_LIST => {
                 let param_list = descendant.to::<ParameterList>();
                 for param in param_list.parameters() {
-                    update_pattern(&param, &mut fixer);
+                    update_pattern(&param, &mut fixer, None);
                 }
             }
             SyntaxKind::DECLARATOR => {
@@ -40,12 +40,15 @@ pub fn add_types(contents: String) -> String {
 
                 if let Some(ref pattern) = declarator.pattern() {
                     match declarator.value() {
-                        None => update_pattern(pattern, &mut fixer),
+                        None => update_pattern(pattern, &mut fixer, None),
                         Some(Expr::Literal(literal)) if literal.is_null() => {
-                            update_pattern(pattern, &mut fixer)
+                            update_pattern(pattern, &mut fixer, None)
                         }
                         Some(Expr::NameRef(name_ref)) if name_ref.text() == "undefined" => {
-                            update_pattern(pattern, &mut fixer)
+                            update_pattern(pattern, &mut fixer, None)
+                        }
+                        Some(Expr::ArrayExpr(array)) if array.elements().count() == 0 => {
+                            update_pattern(pattern, &mut fixer, declarator.value())
                         }
                         _ => (),
                     }
@@ -54,7 +57,7 @@ pub fn add_types(contents: String) -> String {
             SyntaxKind::CATCH_CLAUSE => {
                 let catch = descendant.to::<CatchClause>();
                 if let Some(pattern) = catch.error() {
-                    update_pattern(&pattern, &mut fixer);
+                    update_pattern(&pattern, &mut fixer, None);
                 }
             }
             _ => continue,
@@ -64,7 +67,7 @@ pub fn add_types(contents: String) -> String {
     fixer.apply()
 }
 
-fn update_pattern(pattern: &Pattern, fixer: &mut Fixer) {
+fn update_pattern(pattern: &Pattern, fixer: &mut Fixer, expr: Option<Expr>) {
     for child in pattern.syntax().children() {
         trace!("child: {child:?}");
     }
@@ -73,7 +76,7 @@ fn update_pattern(pattern: &Pattern, fixer: &mut Fixer) {
         Pattern::SinglePattern(single) if single.ty().is_none() => {
             trace!("single: {single:?}");
             if let Some(span) = single.name().map(|name| name.range()) {
-                if let Some(type_annotation) = get_type_from_expression(None) {
+                if let Some(type_annotation) = get_type_from_expression(expr.or(None)) {
                     fixer.insert_after(span, format!(": {}", type_annotation));
                 }
             }
@@ -81,21 +84,21 @@ fn update_pattern(pattern: &Pattern, fixer: &mut Fixer) {
         Pattern::RestPattern(_) => todo!(),
         Pattern::AssignPattern(assign) if assign.ty().is_none() => {
             // FIXME: AssignPattern.key() returns None so we work around it by querying the children instead. Should be Pattern::SinglePattern
-            if let Some(type_annotation) = get_type_from_expression(assign.value()) {
+            if let Some(type_annotation) = get_type_from_expression(expr.or(assign.value())) {
                 if let Some(name) = assign.syntax().child_with_ast::<Name>() {
                     fixer.insert_after(name.range(), format!(": {}", type_annotation));
                 }
             }
         }
         Pattern::ObjectPattern(obj) if obj.ty().is_none() => {
-            if let Some(type_annotation) = get_type_from_expression(None) {
+            if let Some(type_annotation) = get_type_from_expression(expr.or(None)) {
                 fixer.insert_after(obj.range(), format!(": {}", type_annotation));
             }
         }
-        Pattern::ArrayPattern(array) => {
-            debug!("array pattern: {:?}", array.text());
-        }
-        Pattern::ExprPattern(_) => todo!(),
+        // Pattern::ArrayPattern(array) => {
+        //     debug!("array pattern: {:?}", array.text());
+        // }
+        // Pattern::ExprPattern(_) => todo!(),
         _ => (),
     }
 }
@@ -476,8 +479,13 @@ function foo() {
     }
 
     #[test]
-    fn add_types_variable_initialized_array_variable_untouched() {
-        compare("let test = [];", "let test = [];");
+    fn add_types_variable_initialized_ambiguous_array() {
+        compare("let test = [];", "let test: any[] = [];");
+    }
+
+    #[test]
+    fn add_types_variable_initialized_concrete_array() {
+        compare("let test = [1];", "let test = [1];");
     }
 
     #[test]
