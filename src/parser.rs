@@ -126,13 +126,12 @@ fn get_type_from_expression(expr: Option<Expr>) -> Option<String> {
                 LiteralKind::Regex => Some(String::from("RegExp")),
             }
         }
-        Some(Expr::CallExpr(_)) => None,
-        Some(Expr::NewExpr(_)) => None,
-        _ => Some(String::from("any"))
+        Some(Expr::ObjectExpr(_)) | None => Some(String::from("any")),
+        Some(Expr::NameRef(nr)) if nr.text() == "undefined" =>Some(String::from("any")), 
+        _ => None
 
         // Expr::ArrowExpr(_) => todo!(),
         // Expr::Template(_) => todo!(),
-        // Expr::NameRef(_) => todo!(),
         // Expr::ThisExpr(_) => todo!(),
         // Expr::ObjectExpr(_) => todo!(),
         // Expr::GroupingExpr(_) => todo!(),
