@@ -19,7 +19,7 @@ pub fn add_types(contents: String) -> String {
             SyntaxKind::PARAMETER_LIST => {
                 let param_list = descendant.to::<ParameterList>();
                 for param in param_list.parameters() {
-                    update_pattern(&param, None, &mut fixer);
+                    update_pattern(&param, &mut fixer);
                 }
             }
             SyntaxKind::DECLARATOR => {
@@ -37,12 +37,12 @@ pub fn add_types(contents: String) -> String {
 
                 if let Some(ref pattern) = declarator.pattern() {
                     match declarator.value() {
-                        None => update_pattern(pattern, None, &mut fixer),
+                        None => update_pattern(pattern, &mut fixer),
                         Some(Expr::Literal(literal)) if literal.is_null() => {
-                            update_pattern(pattern, None, &mut fixer)
+                            update_pattern(pattern, &mut fixer)
                         }
                         Some(Expr::NameRef(name_ref)) if name_ref.text() == "undefined" => {
-                            update_pattern(pattern, None, &mut fixer)
+                            update_pattern(pattern, &mut fixer)
                         }
                         _ => (),
                     }
@@ -55,7 +55,7 @@ pub fn add_types(contents: String) -> String {
     fixer.apply()
 }
 
-fn update_pattern(pattern: &Pattern, type_annotation: Option<String>, fixer: &mut Fixer) {
+fn update_pattern(pattern: &Pattern, fixer: &mut Fixer) {
     for child in pattern.syntax().children() {
         trace!("child: {child:?}");
     }
@@ -64,37 +64,21 @@ fn update_pattern(pattern: &Pattern, type_annotation: Option<String>, fixer: &mu
         Pattern::SinglePattern(single) if single.ty().is_none() => {
             trace!("single: {single:?}");
             if let Some(span) = single.name().map(|name| name.range()) {
-                fixer.insert_after(
-                    span,
-                    format!(
-                        ": {}",
-                        type_annotation.unwrap_or_else(|| String::from("any"))
-                    ),
-                );
+                let type_annotation = get_type_from_expression(None);
+                fixer.insert_after(span, format!(": {}", type_annotation));
             }
         }
         Pattern::RestPattern(_) => todo!(),
         Pattern::AssignPattern(assign) if assign.ty().is_none() => {
             // FIXME: AssignPattern.key() returns None so we work around it by querying the children instead. Should be Pattern::SinglePattern
-            let expression_type = Some(get_type_from_expression(assign.value()));
+            let type_annotation = get_type_from_expression(assign.value());
             if let Some(name) = assign.syntax().child_with_ast::<Name>() {
-                fixer.insert_after(
-                    name.range(),
-                    format!(
-                        ": {}",
-                        expression_type.unwrap_or_else(|| String::from("any"))
-                    ),
-                );
+                fixer.insert_after(name.range(), format!(": {}", type_annotation));
             }
         }
         Pattern::ObjectPattern(obj) if obj.ty().is_none() => {
-            fixer.insert_after(
-                obj.range(),
-                format!(
-                    ": {}",
-                    type_annotation.unwrap_or_else(|| String::from("any"))
-                ),
-            );
+            let type_annotation = get_type_from_expression(None);
+            fixer.insert_after(obj.range(), format!(": {}", type_annotation));
         }
         Pattern::ArrayPattern(array) => {
             debug!("array pattern: {:?}", array.text());
