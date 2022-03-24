@@ -32,6 +32,12 @@ fn traverse_directories(path: PathBuf) {
         }
     };
 
+    if let Some(full_path) = path.as_os_str().to_str() {
+        if full_path.contains("node_modules") {
+            return;
+        }
+    }
+
     if metadata.is_file() {
         if let Some(file_name) = path.file_stem() {
             let file_name = file_name
