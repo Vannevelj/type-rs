@@ -2,6 +2,7 @@ Utility to convert your Javascript files to Typescript. It will
 
 * Change the file extension to either .ts or .tsx
 * Introduce type annotations where necessary (function parameters, ambiguous locals, catch clauses, etc)
+* Rudimentary support for React-specific logic, e.g. by updating classes to `Component<any, any>` and `PureComponent<any, any>`
 
 
 Limitations:

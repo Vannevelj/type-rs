@@ -65,7 +65,7 @@ pub fn add_types(contents: String) -> String {
                 match class.parent() {
                     Some(parent) if is_react_component_class(&parent) => {
                         match class.parent_type_args() {
-                            None => fixer.insert_after(parent.range(), "<any>"),
+                            None => fixer.insert_after(parent.range(), "<any, any>"),
                             _ => continue,
                         };
                     }
@@ -559,7 +559,7 @@ fn foo() {
     fn add_types_adds_component_props() {
         compare(
             "class MyComponent extends Component { }",
-            "class MyComponent extends Component<any> { }",
+            "class MyComponent extends Component<any, any> { }",
         )
     }
 
@@ -567,7 +567,7 @@ fn foo() {
     fn add_types_adds_component_props_namespace() {
         compare(
             "class MyComponent extends React.Component { }",
-            "class MyComponent extends React.Component<any> { }",
+            "class MyComponent extends React.Component<any, any> { }",
         )
     }
 
@@ -583,7 +583,7 @@ fn foo() {
     fn add_types_adds_purecomponent_props() {
         compare(
             "class MyComponent extends PureComponent { }",
-            "class MyComponent extends PureComponent<any> { }",
+            "class MyComponent extends PureComponent<any, any> { }",
         )
     }
 
@@ -591,7 +591,7 @@ fn foo() {
     fn add_types_adds_purecomponent_props_namespace() {
         compare(
             "class MyComponent extends React.PureComponent { }",
-            "class MyComponent extends React.PureComponent<any> { }",
+            "class MyComponent extends React.PureComponent<any, any> { }",
         )
     }
 
