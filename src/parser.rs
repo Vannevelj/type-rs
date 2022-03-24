@@ -530,4 +530,29 @@ fn foo() {
 }",
         );
     }
+
+    #[test]
+    fn add_types_adds_component_props() {
+        compare("class MyComponent extends Component { }", "class MyComponent extends Component<any> { }")
+    }
+
+    #[test]
+    fn add_types_adds_component_props_namespace() {
+        compare("class MyComponent extends React.Component { }", "class MyComponent extends React.Component<any> { }")
+    }
+
+    #[test]
+    fn add_types_adds_component_props_pre_existing() {
+        compare("class MyComponent extends Component<{}> { }", "class MyComponent extends Component<{}> { }")
+    }
+
+    #[test]
+    fn add_types_adds_purecomponent_props() {
+        compare("class MyComponent extends PureComponent { }", "class MyComponent extends PureComponent<any> { }")
+    }
+
+    #[test]
+    fn add_types_adds_purecomponent_props_namespace() {
+        compare("class MyComponent extends React.PureComponent { }", "class MyComponent extends React.PureComponent<any> { }")
+    }
 }
