@@ -2,8 +2,8 @@ use log::{debug, trace};
 use rslint_core::autofix::Fixer;
 use rslint_parser::{
     ast::{
-        CatchClause, Declarator, Expr, ExprOrSpread, ForStmtInit, LiteralKind, Name, ParameterList,
-        Pattern,
+        CatchClause, ClassDecl, Declarator, Expr, ExprOrSpread, ForStmtInit, LiteralKind, Name,
+        ParameterList, Pattern,
     },
     parse_with_syntax, AstNode, Syntax, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
@@ -58,6 +58,18 @@ pub fn add_types(contents: String) -> String {
                 let catch = descendant.to::<CatchClause>();
                 if let Some(pattern) = catch.error() {
                     update_pattern(&pattern, &mut fixer, None);
+                }
+            }
+            SyntaxKind::CLASS_DECL => {
+                let class = descendant.to::<ClassDecl>();
+                match class.parent() {
+                    Some(parent) if is_react_component_class(&parent) => {
+                        match class.parent_type_args() {
+                            None => fixer.insert_after(parent.range(), "<any>"),
+                            _ => continue,
+                        };
+                    }
+                    _ => continue,
                 }
             }
             _ => continue,
@@ -166,6 +178,18 @@ fn get_type_from_expression(expr: Option<Expr>) -> Option<String> {
         // Expr::TsNonNull(_) => todo!(),
         // Expr::TsAssertion(_) => todo!(),
         // Expr::TsConstAssertion(_) => todo!(),
+    }
+}
+
+fn is_react_component_class(expr: &Expr) -> bool {
+    let class_names = vec!["Component", "PureComponent"];
+
+    match expr {
+        Expr::NameRef(name_ref) => class_names.contains(&name_ref.text().as_str()),
+        Expr::DotExpr(dot_expr) if dot_expr.prop().is_some() => {
+            class_names.contains(&dot_expr.prop().unwrap().text().as_str())
+        }
+        _ => false,
     }
 }
 
@@ -533,26 +557,49 @@ fn foo() {
 
     #[test]
     fn add_types_adds_component_props() {
-        compare("class MyComponent extends Component { }", "class MyComponent extends Component<any> { }")
+        compare(
+            "class MyComponent extends Component { }",
+            "class MyComponent extends Component<any> { }",
+        )
     }
 
     #[test]
     fn add_types_adds_component_props_namespace() {
-        compare("class MyComponent extends React.Component { }", "class MyComponent extends React.Component<any> { }")
+        compare(
+            "class MyComponent extends React.Component { }",
+            "class MyComponent extends React.Component<any> { }",
+        )
     }
 
     #[test]
     fn add_types_adds_component_props_pre_existing() {
-        compare("class MyComponent extends Component<{}> { }", "class MyComponent extends Component<{}> { }")
+        compare(
+            "class MyComponent extends Component<{}> { }",
+            "class MyComponent extends Component<{}> { }",
+        )
     }
 
     #[test]
     fn add_types_adds_purecomponent_props() {
-        compare("class MyComponent extends PureComponent { }", "class MyComponent extends PureComponent<any> { }")
+        compare(
+            "class MyComponent extends PureComponent { }",
+            "class MyComponent extends PureComponent<any> { }",
+        )
     }
 
     #[test]
     fn add_types_adds_purecomponent_props_namespace() {
-        compare("class MyComponent extends React.PureComponent { }", "class MyComponent extends React.PureComponent<any> { }")
+        compare(
+            "class MyComponent extends React.PureComponent { }",
+            "class MyComponent extends React.PureComponent<any> { }",
+        )
+    }
+
+    #[test]
+    fn add_types_different_class() {
+        compare(
+            "class MyComponent extends OtherType { }",
+            "class MyComponent extends OtherType { }",
+        )
     }
 }
