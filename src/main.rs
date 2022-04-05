@@ -1,13 +1,9 @@
-mod options;
-mod parser;
-
 use log::{debug, error, info, warn};
 use std::path::PathBuf;
 use std::{fs, thread};
 use structopt::StructOpt;
-
-use crate::options::Options;
-use crate::parser::add_types;
+use type_rs::options::Options;
+use type_rs::parser::add_types;
 
 fn main() {
     env_logger::init_from_env(
