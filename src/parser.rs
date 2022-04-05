@@ -2,11 +2,12 @@ use log::{debug, trace};
 use rslint_core::autofix::Fixer;
 use rslint_parser::{
     ast::{
-        CatchClause, ClassDecl, Declarator, Expr, ExprOrSpread, ForStmtInit, LiteralKind, Name,
-        ParameterList, Pattern,
+        CatchClause, ClassDecl, Declarator, DotExpr, Expr, ExprOrSpread, ExprPattern, ForStmtInit,
+        LiteralKind, Name, ParameterList, Pattern,
     },
     parse_with_syntax, AstNode, Syntax, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
+use std::collections::HashSet;
 use std::sync::Arc;
 
 pub fn add_types(contents: String) -> String {
@@ -16,6 +17,7 @@ pub fn add_types(contents: String) -> String {
     let arc = Arc::from(contents);
     let mut fixer = Fixer::new(arc);
     print_ast(&ast);
+    let start_of_file = ast.text_range();
 
     for descendant in ast.descendants() {
         match descendant.kind() {
@@ -62,10 +64,20 @@ pub fn add_types(contents: String) -> String {
             }
             SyntaxKind::CLASS_DECL => {
                 let class = descendant.to::<ClassDecl>();
+                let props_fields = gather_props(&ast);
+                debug!("Found props: {props_fields:?}");
+
                 match class.parent() {
                     Some(parent) if is_react_component_class(&parent) => {
-                        match class.parent_type_args() {
-                            None => fixer.insert_after(parent.range(), "<any, any>"),
+                        match (class.parent_type_args(), props_fields.len()) {
+                            (None, 1..) => {
+                                fixer.insert_before(
+                                    start_of_file,
+                                    get_props_definition(props_fields),
+                                );
+                                fixer.insert_after(parent.range(), "<Props, any>")
+                            }
+                            (None, 0) => fixer.insert_after(parent.range(), "<any, any>"),
                             _ => continue,
                         };
                     }
@@ -77,6 +89,60 @@ pub fn add_types(contents: String) -> String {
     }
 
     fixer.apply()
+}
+
+fn gather_props(root: &SyntaxNode) -> HashSet<String> {
+    let mut props_fields = HashSet::new();
+
+    for descendant in root.descendants() {
+        match descendant.kind() {
+            SyntaxKind::DOT_EXPR => {
+                fn expand_dot_expr(expr: DotExpr, props: &mut HashSet<String>) {
+                    debug!(
+                        "Found dot_expr: {expr:?} [{:?}: {:?}]",
+                        expr.object(),
+                        expr.prop()
+                    );
+
+                    if let Some(object_expr) = expr.object() {
+                        if let Some(name) = object_expr.syntax().child_with_ast::<Name>() {
+                            if name.text() == "props" {
+                                if let Some(name_prop) = expr.prop() {
+                                    props.insert(name_prop.text());
+                                }
+                            }
+                        }
+                    }
+
+                    match expr.object() {
+                        Some(Expr::DotExpr(nested_dot)) => expand_dot_expr(nested_dot, props),
+                        _ => (),
+                    }
+                }
+                let dot_expr = descendant.to::<DotExpr>();
+                expand_dot_expr(dot_expr, &mut props_fields)
+            }
+            _ => (),
+        }
+    }
+
+    props_fields
+}
+
+fn get_props_definition(fields: HashSet<String>) -> String {
+    let mut props = String::from("");
+    // TODO: deterministic iteration over the fields
+    for field in fields {
+        props += format!("    {field}: any,\n").as_str();
+    }
+
+    format!(
+        "
+interface Props {{
+{}}}
+",
+        props
+    )
 }
 
 fn update_pattern(pattern: &Pattern, fixer: &mut Fixer, expr: Option<Expr>) {

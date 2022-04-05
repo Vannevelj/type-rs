@@ -10,7 +10,7 @@ mod tests {
 
     fn compare(input: &str, expected_output: &str) {
         let output = add_types(String::from(input));
-        assert_eq!(expected_output, output);
+        assert_eq!(output, expected_output);
     }
 
     #[test]
@@ -383,6 +383,65 @@ fn foo() {
         compare(
             "class MyComponent extends OtherType { }",
             "class MyComponent extends OtherType { }",
+        )
+    }
+
+    #[test]
+    fn add_types_generate_props_class_this_dot_props_single() {
+        compare(
+            "
+class MyComponent extends Component { 
+    function test() {
+        console.log(this.props.wowee);
+    }
+}",
+            "
+interface Props {
+    wowee: any,
+}
+
+class MyComponent extends Component<Props, any> { 
+    function test() {
+        console.log(this.props.wowee);
+    }
+}",
+        )
+    }
+
+    #[test]
+    fn add_types_generate_props_class_this_dot_props_multi() {
+        compare(
+            "
+class MyComponent extends Component { 
+    function test() {
+        console.log(this.props.wowee);
+        this.props.callback();
+    }
+
+    render() {
+        if (this.props.otherone === 5) {
+            return null;
+        }
+    }
+}",
+            "
+interface Props {
+    wowee: any,
+    callback: any,
+    otherone: any,
+}
+
+class MyComponent extends Component<Props, any> { 
+    function test() {
+        console.log(this.props.wowee);
+    }
+
+    render() {
+        if (this.props.otherone === 5) {
+            return null;
+        }
+    }
+}",
         )
     }
 }
