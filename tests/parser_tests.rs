@@ -416,6 +416,7 @@ class MyComponent extends Component {
     function test() {
         console.log(this.props.wowee);
         this.props.callback();
+        this.props.callback();
     }
 
     render() {
@@ -426,14 +427,16 @@ class MyComponent extends Component {
 }",
             "
 interface Props {
-    wowee: any,
     callback: any,
     otherone: any,
+    wowee: any,
 }
 
 class MyComponent extends Component<Props, any> { 
     function test() {
         console.log(this.props.wowee);
+        this.props.callback();
+        this.props.callback();
     }
 
     render() {

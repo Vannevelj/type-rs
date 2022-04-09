@@ -2,12 +2,12 @@ use log::{debug, trace};
 use rslint_core::autofix::Fixer;
 use rslint_parser::{
     ast::{
-        CatchClause, ClassDecl, Declarator, DotExpr, Expr, ExprOrSpread, ExprPattern, ForStmtInit,
-        LiteralKind, Name, ParameterList, Pattern,
+        CatchClause, ClassDecl, Declarator, DotExpr, Expr, ExprOrSpread, ForStmtInit, LiteralKind,
+        Name, ParameterList, Pattern,
     },
     parse_with_syntax, AstNode, Syntax, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 pub fn add_types(contents: String) -> String {
@@ -91,13 +91,13 @@ pub fn add_types(contents: String) -> String {
     fixer.apply()
 }
 
-fn gather_props(root: &SyntaxNode) -> HashSet<String> {
-    let mut props_fields = HashSet::new();
+fn gather_props(root: &SyntaxNode) -> BTreeSet<String> {
+    let mut props_fields = BTreeSet::new();
 
     for descendant in root.descendants() {
         match descendant.kind() {
             SyntaxKind::DOT_EXPR => {
-                fn expand_dot_expr(expr: DotExpr, props: &mut HashSet<String>) {
+                fn expand_dot_expr(expr: DotExpr, props: &mut BTreeSet<String>) {
                     debug!(
                         "Found dot_expr: {expr:?} [{:?}: {:?}]",
                         expr.object(),
@@ -129,9 +129,8 @@ fn gather_props(root: &SyntaxNode) -> HashSet<String> {
     props_fields
 }
 
-fn get_props_definition(fields: HashSet<String>) -> String {
+fn get_props_definition(fields: BTreeSet<String>) -> String {
     let mut props = String::from("");
-    // TODO: deterministic iteration over the fields
     for field in fields {
         props += format!("    {field}: any,\n").as_str();
     }
