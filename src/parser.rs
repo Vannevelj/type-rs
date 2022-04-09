@@ -104,18 +104,18 @@ fn gather_props(root: &SyntaxNode) -> BTreeSet<String> {
                         expr.prop()
                     );
 
-                    if let Some(object_expr) = expr.object() {
-                        if let Some(name) = object_expr.syntax().child_with_ast::<Name>() {
-                            if name.text() == "props" {
-                                if let Some(name_prop) = expr.prop() {
-                                    props.insert(name_prop.text());
+                    match expr.object() {
+                        Some(Expr::DotExpr(nested_dot)) => {
+                            if let Some(name) = nested_dot.syntax().child_with_ast::<Name>() {
+                                if name.text() == "props" {
+                                    if let Some(name_prop) = expr.prop() {
+                                        props.insert(name_prop.text());
+                                    }
                                 }
                             }
-                        }
-                    }
 
-                    match expr.object() {
-                        Some(Expr::DotExpr(nested_dot)) => expand_dot_expr(nested_dot, props),
+                            expand_dot_expr(nested_dot, props)
+                        }
                         _ => (),
                     }
                 }
