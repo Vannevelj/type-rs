@@ -412,11 +412,16 @@ class MyComponent extends Component<Props, any> {
     fn add_types_generate_props_class_this_dot_props_multi() {
         compare(
             "
-class MyComponent extends Component { 
+class MyComponent extends Component {
+    constructor() {
+        this.state = {};
+    }
+
     function test() {
         console.log(this.props.wowee);
         this.props.callback();
         this.props.callback();
+        this.state.testNumber = 5;
     }
 
     render() {
@@ -432,17 +437,51 @@ interface Props {
     wowee: any,
 }
 
-class MyComponent extends Component<Props, any> { 
+interface State {
+    testNumber: any,
+}
+
+class MyComponent extends Component<Props, State> {
+    constructor() {
+        this.state = {};
+    }
+
     function test() {
         console.log(this.props.wowee);
         this.props.callback();
         this.props.callback();
+        this.state.testNumber = 5;
     }
 
     render() {
         if (this.props.otherone === 5) {
             return null;
         }
+    }
+}",
+        )
+    }
+
+    #[test]
+    fn add_types_generate_state() {
+        compare(
+            "
+class MyComponent extends Component { 
+    function test() {
+        console.log(this.state.wowee);
+    }
+}",
+            "
+interface Props {
+}
+
+interface State {
+    wowee: any,
+}
+
+class MyComponent extends Component<Props, State> { 
+    function test() {
+        console.log(this.state.wowee);
     }
 }",
         )

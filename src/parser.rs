@@ -64,20 +64,36 @@ pub fn add_types(contents: String) -> String {
             }
             SyntaxKind::CLASS_DECL => {
                 let class = descendant.to::<ClassDecl>();
-                let props_fields = gather_props(&ast);
+                let props_fields = gather_usages(&ast, "props");
+                let state_fields = gather_usages(&ast, "state");
                 debug!("Found props: {props_fields:?}");
 
                 match class.parent() {
                     Some(parent) if is_react_component_class(&parent) => {
-                        match (class.parent_type_args(), props_fields.len()) {
-                            (None, 1..) => {
+                        match (
+                            class.parent_type_args(),
+                            props_fields.len(),
+                            state_fields.len(),
+                        ) {
+                            (None, .., 1..) => {
                                 fixer.insert_before(
                                     start_of_file,
-                                    get_props_definition(props_fields),
+                                    create_type_definition(props_fields, "Props"),
+                                );
+                                fixer.insert_before(
+                                    start_of_file,
+                                    create_type_definition(state_fields, "State"),
+                                );
+                                fixer.insert_after(parent.range(), "<Props, State>")
+                            }
+                            (None, 1.., 0) => {
+                                fixer.insert_before(
+                                    start_of_file,
+                                    create_type_definition(props_fields, "Props"),
                                 );
                                 fixer.insert_after(parent.range(), "<Props, any>")
                             }
-                            (None, 0) => fixer.insert_after(parent.range(), "<any, any>"),
+                            (None, 0, 0) => fixer.insert_after(parent.range(), "<any, any>"),
                             _ => continue,
                         };
                     }
@@ -91,13 +107,17 @@ pub fn add_types(contents: String) -> String {
     fixer.apply()
 }
 
-fn gather_props(root: &SyntaxNode) -> BTreeSet<String> {
+fn gather_usages(root: &SyntaxNode, component_aspect: &str) -> BTreeSet<String> {
     let mut props_fields = BTreeSet::new();
 
     for descendant in root.descendants() {
         match descendant.kind() {
             SyntaxKind::DOT_EXPR => {
-                fn expand_dot_expr(expr: DotExpr, props: &mut BTreeSet<String>) {
+                fn expand_dot_expr(
+                    expr: DotExpr,
+                    props: &mut BTreeSet<String>,
+                    component_aspect: &str,
+                ) {
                     debug!(
                         "Found dot_expr: {expr:?} [{:?}: {:?}]",
                         expr.object(),
@@ -107,20 +127,20 @@ fn gather_props(root: &SyntaxNode) -> BTreeSet<String> {
                     match expr.object() {
                         Some(Expr::DotExpr(nested_dot)) => {
                             if let Some(name) = nested_dot.syntax().child_with_ast::<Name>() {
-                                if name.text() == "props" {
+                                if name.text() == component_aspect {
                                     if let Some(name_prop) = expr.prop() {
                                         props.insert(name_prop.text());
                                     }
                                 }
                             }
 
-                            expand_dot_expr(nested_dot, props)
+                            expand_dot_expr(nested_dot, props, component_aspect)
                         }
                         _ => (),
                     }
                 }
                 let dot_expr = descendant.to::<DotExpr>();
-                expand_dot_expr(dot_expr, &mut props_fields)
+                expand_dot_expr(dot_expr, &mut props_fields, component_aspect)
             }
             _ => (),
         }
@@ -129,7 +149,7 @@ fn gather_props(root: &SyntaxNode) -> BTreeSet<String> {
     props_fields
 }
 
-fn get_props_definition(fields: BTreeSet<String>) -> String {
+fn create_type_definition(fields: BTreeSet<String>, name: &str) -> String {
     let mut props = String::from("");
     for field in fields {
         props += format!("    {field}: any,\n").as_str();
@@ -137,7 +157,7 @@ fn get_props_definition(fields: BTreeSet<String>) -> String {
 
     format!(
         "
-interface Props {{
+interface {name} {{
 {}}}
 ",
         props
