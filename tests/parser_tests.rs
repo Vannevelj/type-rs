@@ -400,7 +400,7 @@ interface Props {
     wowee: any,
 }
 
-class MyComponent extends Component<Props, any> { 
+class MyComponent extends Component<Props> { 
     function test() {
         console.log(this.props.wowee);
     }
@@ -482,6 +482,55 @@ interface State {
 class MyComponent extends Component<Props, State> { 
     function test() {
         console.log(this.state.wowee);
+    }
+}",
+        )
+    }
+
+    #[test]
+    fn add_types_generate_props_destructured() {
+        compare(
+            "
+class MyComponent extends Component { 
+    function test() {
+        const { somefield } = this.props;
+        console.log(somefield);
+    }
+}",
+            "
+interface Props {
+    somefield: any,
+}
+
+class MyComponent extends Component<Props> { 
+    function test() {
+        const { somefield } = this.props;
+        console.log(somefield);
+    }
+}",
+        )
+    }
+
+    #[test]
+    fn add_types_generate_props_destructured_multiple() {
+        compare(
+            "
+class MyComponent extends Component { 
+    function test() {
+        const { somefield, otherField } = this.props;
+        console.log(somefield);
+    }
+}",
+            "
+interface Props {
+    otherField: any,
+    somefield: any,
+}
+
+class MyComponent extends Component<Props> { 
+    function test() {
+        const { somefield, otherField } = this.props;
+        console.log(somefield);
     }
 }",
         )

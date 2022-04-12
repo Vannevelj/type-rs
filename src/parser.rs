@@ -3,7 +3,7 @@ use rslint_core::autofix::Fixer;
 use rslint_parser::{
     ast::{
         CatchClause, ClassDecl, Declarator, DotExpr, Expr, ExprOrSpread, ForStmtInit, LiteralKind,
-        Name, ParameterList, Pattern,
+        Name, ObjectPattern, ParameterList, Pattern,
     },
     parse_with_syntax, AstNode, Syntax, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
@@ -91,7 +91,7 @@ pub fn add_types(contents: String) -> String {
                                     start_of_file,
                                     create_type_definition(props_fields, "Props"),
                                 );
-                                fixer.insert_after(parent.range(), "<Props, any>")
+                                fixer.insert_after(parent.range(), "<Props>")
                             }
                             (None, 0, 0) => fixer.insert_after(parent.range(), "<any, any>"),
                             _ => continue,
@@ -124,11 +124,37 @@ fn gather_usages(root: &SyntaxNode, component_aspect: &str) -> BTreeSet<String> 
                         expr.prop()
                     );
 
+                    if let Some(declarator) =
+                        expr.syntax().ancestors().find(|anc| anc.is::<Declarator>())
+                    {
+                        debug!("Found declarator: {declarator:?}");
+
+                        if let Some(object_pattern) = declarator
+                            .descendants()
+                            .find(|desc| desc.is::<ObjectPattern>())
+                        {
+                            let object_pattern = object_pattern.to::<ObjectPattern>();
+                            debug!("Found object_pattern: {object_pattern:?}",);
+
+                            if let Some(name) = expr.syntax().child_with_ast::<Name>() {
+                                debug!("Found child name: {name} (looking for {component_aspect})");
+                                if name.text() == component_aspect {
+                                    for element in object_pattern.elements() {
+                                        props.insert(element.text());
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     match expr.object() {
                         Some(Expr::DotExpr(nested_dot)) => {
+                            debug!("Found nested dot: {nested_dot:?}");
+
                             if let Some(name) = nested_dot.syntax().child_with_ast::<Name>() {
                                 if name.text() == component_aspect {
                                     if let Some(name_prop) = expr.prop() {
+                                        debug!("Found nested name: {name_prop:?}");
                                         props.insert(name_prop.text());
                                     }
                                 }
