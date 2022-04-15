@@ -1,9 +1,11 @@
+use inflector::Inflector;
 use log::{debug, trace};
 use rslint_core::autofix::Fixer;
 use rslint_parser::{
     ast::{
-        CatchClause, ClassDecl, Declarator, DotExpr, Expr, ExprOrSpread, ForStmtInit, LiteralKind,
-        Name, ObjectPattern, ParameterList, Pattern,
+        ArrowExpr, CatchClause, ClassDecl, Constructor, Declarator, DotExpr, Expr, ExprOrSpread,
+        FnDecl, FnExpr, ForStmtInit, LiteralKind, Method, Name, ObjectPattern, ParameterList,
+        Pattern,
     },
     parse_with_syntax, AstNode, Syntax, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
@@ -23,8 +25,34 @@ pub fn add_types(contents: String) -> String {
         match descendant.kind() {
             SyntaxKind::PARAMETER_LIST => {
                 let param_list = descendant.to::<ParameterList>();
+                let outer_scope = descendant
+                    .ancestors()
+                    .find(|anc| {
+                        anc.is::<FnDecl>()
+                            || anc.is::<Constructor>()
+                            || anc.is::<Method>()
+                            || anc.is::<ArrowExpr>()
+                            || anc.is::<FnExpr>()
+                    })
+                    .unwrap();
                 for param in param_list.parameters() {
-                    update_pattern(&param, &mut fixer, None);
+                    let parameter_name = param.text();
+                    let new_parameter_type = parameter_name.to_pascal_case();
+                    let param_usages = gather_usages(&outer_scope, parameter_name.as_str());
+                    debug!("Found param_usages: {param_usages:?} ({parameter_name})");
+
+                    match param_usages.len() {
+                        1.. => {
+                            fixer.insert_before(
+                                start_of_file,
+                                create_type_definition(param_usages, new_parameter_type.as_str()),
+                            );
+                            update_pattern(&param, &mut fixer, None, Some(new_parameter_type));
+                        }
+                        _ => {
+                            update_pattern(&param, &mut fixer, None, None);
+                        }
+                    }
                 }
             }
             SyntaxKind::DECLARATOR => {
@@ -42,15 +70,15 @@ pub fn add_types(contents: String) -> String {
 
                 if let Some(ref pattern) = declarator.pattern() {
                     match declarator.value() {
-                        None => update_pattern(pattern, &mut fixer, None),
+                        None => update_pattern(pattern, &mut fixer, None, None),
                         Some(Expr::Literal(literal)) if literal.is_null() => {
-                            update_pattern(pattern, &mut fixer, None)
+                            update_pattern(pattern, &mut fixer, None, None)
                         }
                         Some(Expr::NameRef(name_ref)) if name_ref.text() == "undefined" => {
-                            update_pattern(pattern, &mut fixer, None)
+                            update_pattern(pattern, &mut fixer, None, None)
                         }
                         Some(Expr::ArrayExpr(array)) if array.elements().count() == 0 => {
-                            update_pattern(pattern, &mut fixer, declarator.value())
+                            update_pattern(pattern, &mut fixer, declarator.value(), None)
                         }
                         _ => (),
                     }
@@ -59,7 +87,7 @@ pub fn add_types(contents: String) -> String {
             SyntaxKind::CATCH_CLAUSE => {
                 let catch = descendant.to::<CatchClause>();
                 if let Some(pattern) = catch.error() {
-                    update_pattern(&pattern, &mut fixer, None);
+                    update_pattern(&pattern, &mut fixer, None, None);
                 }
             }
             SyntaxKind::CLASS_DECL => {
@@ -162,7 +190,20 @@ fn gather_usages(root: &SyntaxNode, component_aspect: &str) -> BTreeSet<String> 
 
                             expand_dot_expr(nested_dot, props, component_aspect)
                         }
-                        _ => (),
+                        Some(Expr::NameRef(name_ref)) => {
+                            let name = name_ref.text();
+                            debug!("name_ref! Found {:?}: {name}", name_ref);
+
+                            if name == component_aspect {
+                                if let Some(name_prop) = expr.prop() {
+                                    debug!("Found nested name: {name_prop:?}");
+                                    props.insert(name_prop.text());
+                                }
+                            }
+                        }
+                        _ => {
+                            debug!("other! Found {:?}", expr.object());
+                        }
                     }
                 }
                 let dot_expr = descendant.to::<DotExpr>();
@@ -190,7 +231,12 @@ interface {name} {{
     )
 }
 
-fn update_pattern(pattern: &Pattern, fixer: &mut Fixer, expr: Option<Expr>) {
+fn update_pattern(
+    pattern: &Pattern,
+    fixer: &mut Fixer,
+    expr: Option<Expr>,
+    created_type: Option<String>,
+) {
     for child in pattern.syntax().children() {
         trace!("child: {child:?}");
     }
@@ -199,7 +245,9 @@ fn update_pattern(pattern: &Pattern, fixer: &mut Fixer, expr: Option<Expr>) {
         Pattern::SinglePattern(single) if single.ty().is_none() => {
             trace!("single: {single:?}");
             if let Some(span) = single.name().map(|name| name.range()) {
-                if let Some(type_annotation) = get_type_from_expression(expr.or(None)) {
+                if let Some(type_annotation) =
+                    get_type_from_expression(expr.or(None), &created_type)
+                {
                     fixer.insert_after(span, format!(": {}", type_annotation));
                 }
             }
@@ -207,7 +255,8 @@ fn update_pattern(pattern: &Pattern, fixer: &mut Fixer, expr: Option<Expr>) {
         Pattern::RestPattern(_) => todo!(),
         Pattern::AssignPattern(assign) if assign.ty().is_none() => {
             // FIXME: AssignPattern.key() returns None so we work around it by querying the children instead. Should be Pattern::SinglePattern
-            if let Some(type_annotation) = get_type_from_expression(expr.or_else(|| assign.value()))
+            if let Some(type_annotation) =
+                get_type_from_expression(expr.or_else(|| assign.value()), &created_type)
             {
                 if let Some(name) = assign.syntax().child_with_ast::<Name>() {
                     fixer.insert_after(name.range(), format!(": {}", type_annotation));
@@ -215,7 +264,7 @@ fn update_pattern(pattern: &Pattern, fixer: &mut Fixer, expr: Option<Expr>) {
             }
         }
         Pattern::ObjectPattern(obj) if obj.ty().is_none() => {
-            if let Some(type_annotation) = get_type_from_expression(expr.or(None)) {
+            if let Some(type_annotation) = get_type_from_expression(expr.or(None), &created_type) {
                 fixer.insert_after(obj.range(), format!(": {}", type_annotation));
             }
         }
@@ -227,15 +276,19 @@ fn update_pattern(pattern: &Pattern, fixer: &mut Fixer, expr: Option<Expr>) {
     }
 }
 
-fn get_type_from_expression(expr: Option<Expr>) -> Option<String> {
+fn get_type_from_expression(expr: Option<Expr>, created_type: &Option<String>) -> Option<String> {
     trace!("expr: {expr:?}");
+    if created_type.is_some() {
+        return created_type.clone();
+    }
+
     match expr {
         Some(Expr::ArrayExpr(array)) => {
             let default_return = Some(String::from("any[]"));
             let mut found_type = None;
             for element in array.elements() {
                 if let ExprOrSpread::Expr(expr) = element {
-                    let expression_type = get_type_from_expression(Some(expr));
+                    let expression_type = get_type_from_expression(Some(expr), created_type);
                     match expression_type {
                         Some(element_type) => {
                             match found_type {

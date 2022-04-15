@@ -535,4 +535,44 @@ class MyComponent extends Component<Props> {
 }",
         )
     }
+
+    #[test]
+    fn add_types_generate_props_functional_component() {
+        compare(
+            "
+function Welcome(props) {
+    console.log(props.name);
+    return undefined;
+}",
+            "
+interface Props {
+    name: any,
+}
+
+function Welcome(props: Props) {
+    console.log(props.name);
+    return undefined;
+}",
+        )
+    }
+
+    #[test]
+    fn add_types_regular_function() {
+        compare(
+            "
+function Welcome(args) {
+    console.log(args.name);
+    return undefined;
+}",
+            "
+interface Args {
+    name: any,
+}
+
+function Welcome(args: Args) {
+    console.log(args.name);
+    return undefined;
+}",
+        )
+    }
 }
