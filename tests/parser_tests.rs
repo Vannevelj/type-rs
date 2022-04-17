@@ -575,4 +575,24 @@ function Welcome(args: Args) {
 }",
         )
     }
+
+    #[test]
+    fn add_types_function_object_params_with_usage() {
+        compare(
+            "
+function foo(a, b, c) {
+    console.log(a);
+    console.log(b.field);
+}",
+            "
+interface B {
+    field: any,
+}
+
+function foo(a: any, b: B, c: any) {
+    console.log(a);
+    console.log(b.field);
+}",
+        );
+    }
 }

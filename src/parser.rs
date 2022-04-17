@@ -1,6 +1,5 @@
 use inflector::Inflector;
 use log::{debug, trace};
-use rslint_core::autofix::Fixer;
 use rslint_parser::{
     ast::{
         ArrowExpr, CatchClause, ClassDecl, Constructor, Declarator, DotExpr, Expr, ExprOrSpread,
@@ -10,14 +9,14 @@ use rslint_parser::{
     parse_with_syntax, AstNode, Syntax, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
 use std::collections::BTreeSet;
-use std::sync::Arc;
+
+use crate::text_editor::{TextEdit, TextEditor};
 
 pub fn add_types(contents: String) -> String {
     let syntax = Syntax::default().typescript();
     let parse = parse_with_syntax(contents.as_str(), 0, syntax);
     let ast = parse.syntax();
-    let arc = Arc::from(contents);
-    let mut fixer = Fixer::new(arc);
+    let mut fixer = TextEditor::load(contents);
     print_ast(&ast);
     let start_of_file = ast.text_range();
 
@@ -43,6 +42,7 @@ pub fn add_types(contents: String) -> String {
 
                     match param_usages.len() {
                         1.. => {
+                            debug!("FIXER insert: {:?}", start_of_file);
                             fixer.insert_before(
                                 start_of_file,
                                 create_type_definition(param_usages, new_parameter_type.as_str()),
@@ -104,24 +104,32 @@ pub fn add_types(contents: String) -> String {
                             state_fields.len(),
                         ) {
                             (None, .., 1..) => {
+                                debug!("FIXER insert: {:?}", start_of_file);
                                 fixer.insert_before(
                                     start_of_file,
                                     create_type_definition(props_fields, "Props"),
                                 );
+                                debug!("FIXER insert: {:?}", start_of_file);
                                 fixer.insert_before(
                                     start_of_file,
                                     create_type_definition(state_fields, "State"),
                                 );
+                                debug!("FIXER insert: {:?}", parent.range());
                                 fixer.insert_after(parent.range(), "<Props, State>")
                             }
                             (None, 1.., 0) => {
+                                debug!("FIXER insert: {:?}", start_of_file);
                                 fixer.insert_before(
                                     start_of_file,
                                     create_type_definition(props_fields, "Props"),
                                 );
+                                debug!("FIXER insert: {:?}", parent.range());
                                 fixer.insert_after(parent.range(), "<Props>")
                             }
-                            (None, 0, 0) => fixer.insert_after(parent.range(), "<any, any>"),
+                            (None, 0, 0) => {
+                                debug!("FIXER insert: {:?}", parent.range());
+                                fixer.insert_after(parent.range(), "<any, any>")
+                            }
                             _ => continue,
                         };
                     }
@@ -233,7 +241,7 @@ interface {name} {{
 
 fn update_pattern(
     pattern: &Pattern,
-    fixer: &mut Fixer,
+    fixer: &mut TextEditor,
     expr: Option<Expr>,
     created_type: Option<String>,
 ) {
@@ -248,6 +256,7 @@ fn update_pattern(
                 if let Some(type_annotation) =
                     get_type_from_expression(expr.or(None), &created_type)
                 {
+                    debug!("FIXER insert: {span:?}");
                     fixer.insert_after(span, format!(": {}", type_annotation));
                 }
             }
@@ -259,12 +268,14 @@ fn update_pattern(
                 get_type_from_expression(expr.or_else(|| assign.value()), &created_type)
             {
                 if let Some(name) = assign.syntax().child_with_ast::<Name>() {
+                    debug!("FIXER insert: {:?}", name.range());
                     fixer.insert_after(name.range(), format!(": {}", type_annotation));
                 }
             }
         }
         Pattern::ObjectPattern(obj) if obj.ty().is_none() => {
             if let Some(type_annotation) = get_type_from_expression(expr.or(None), &created_type) {
+                debug!("FIXER insert: {:?}", obj.range());
                 fixer.insert_after(obj.range(), format!(": {}", type_annotation));
             }
         }
