@@ -595,6 +595,29 @@ function foo(a: any, b: B, c: any) {
 }",
         );
     }
+
+    #[test]
+    fn add_types_function_object_params_nested() {
+        compare(
+            "
+function foo(a, b, c) {
+    console.log(a);
+    console.log(b.field.nested);
+}",
+            "
+interface B {
+    field: {
+        nested: any,
+    },
+}
+
+function foo(a: any, b: B, c: any) {
+    console.log(a);
+    console.log(b.field.nested);
+}",
+        );
+    }
+
     #[test]
     fn add_types_params_usage_number() {
         compare(
