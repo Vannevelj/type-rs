@@ -16,26 +16,6 @@ use crate::text_editor::{TextEdit, TextEditor};
 struct NameWithType {
     name: String,
     expr: Option<Expr>,
-    children: Vec<NameWithType>,
-}
-
-impl NameWithType {
-    fn render(&self, buf: &mut String, depth: usize) -> String {
-        let resolved_type = get_surrounding_expression(self.expr).unwrap_or(String::from("any"));
-        let spacing = "    ".repeat(depth);
-        match self.children.len() {
-            0 => buf.push_str(format!("{spacing}{}: {},\n", self.name, resolved_type).as_str()),
-            _ => {
-                buf.push_str(format!("{spacing}{}: {{", self.name).as_str());
-                for child in &self.children {
-                    buf.push_str(child.render(&mut buf, depth + 1).as_str())
-                }
-                buf.push_str(format!("{spacing}}}").as_str());
-            }
-        }
-
-        buf.clone()
-    }
 }
 
 impl Ord for NameWithType {
@@ -75,11 +55,11 @@ pub fn add_types(contents: String) -> String {
                 for param in param_list.parameters() {
                     let parameter_name = param.text();
                     let new_parameter_type = parameter_name.to_pascal_case();
-                    let param_usages = build_type(&outer_scope, parameter_name.as_str());
+                    let param_usages = gather_usages(&outer_scope, parameter_name.as_str());
                     debug!("Found param_usages: {param_usages:?} ({parameter_name})");
 
-                    match param_usages {
-                        Some(_) => {
+                    match param_usages.len() {
+                        1.. => {
                             debug!("FIXER insert: {:?}", start_of_file);
                             fixer.insert_before(
                                 start_of_file,
@@ -130,14 +110,18 @@ pub fn add_types(contents: String) -> String {
             }
             SyntaxKind::CLASS_DECL => {
                 let class = descendant.to::<ClassDecl>();
-                let props_fields = build_type(&ast, "props");
-                let state_fields = build_type(&ast, "state");
+                let props_fields = gather_usages(&ast, "props");
+                let state_fields = gather_usages(&ast, "state");
                 debug!("Found props: {props_fields:?}");
 
                 match class.parent() {
                     Some(parent) if is_react_component_class(&parent) => {
-                        match (class.parent_type_args(), props_fields, state_fields) {
-                            (None, .., Some(_)) => {
+                        match (
+                            class.parent_type_args(),
+                            props_fields.len(),
+                            state_fields.len(),
+                        ) {
+                            (None, .., 1..) => {
                                 debug!("FIXER insert: {:?}", start_of_file);
                                 fixer.insert_before(
                                     start_of_file,
@@ -151,7 +135,7 @@ pub fn add_types(contents: String) -> String {
                                 debug!("FIXER insert: {:?}", parent.range());
                                 fixer.insert_after(parent.range(), "<Props, State>")
                             }
-                            (None, Some(_), None) => {
+                            (None, 1.., 0) => {
                                 debug!("FIXER insert: {:?}", start_of_file);
                                 fixer.insert_before(
                                     start_of_file,
@@ -160,7 +144,7 @@ pub fn add_types(contents: String) -> String {
                                 debug!("FIXER insert: {:?}", parent.range());
                                 fixer.insert_after(parent.range(), "<Props>")
                             }
-                            (None, None, None) => {
+                            (None, 0, 0) => {
                                 debug!("FIXER insert: {:?}", parent.range());
                                 fixer.insert_after(parent.range(), "<any, any>")
                             }
@@ -177,15 +161,15 @@ pub fn add_types(contents: String) -> String {
     fixer.apply()
 }
 
-fn build_type(root: &SyntaxNode, bound_var: &str) -> Option<NameWithType> {
-    let mut root_type: NameWithType;
+fn gather_usages(root: &SyntaxNode, component_aspect: &str) -> BTreeSet<NameWithType> {
+    let mut props_fields = BTreeSet::new();
 
     for descendant in root.descendants() {
         match descendant.kind() {
             SyntaxKind::DOT_EXPR => {
                 fn expand_dot_expr(
                     expr: DotExpr,
-                    parent: &mut NameWithType,
+                    props: &mut BTreeSet<NameWithType>,
                     component_aspect: &str,
                 ) {
                     debug!(
@@ -210,11 +194,10 @@ fn build_type(root: &SyntaxNode, bound_var: &str) -> Option<NameWithType> {
                                 debug!("Found child name: {name} (looking for {component_aspect})");
                                 if name.text() == component_aspect {
                                     for element in object_pattern.elements() {
-                                        parent.children.push(NameWithType {
+                                        props.insert(NameWithType {
                                             name: element.text(),
                                             expr: expr.object(),
-                                            children: Vec::new(),
-                                        })
+                                        });
                                     }
                                 }
                             }
@@ -229,16 +212,15 @@ fn build_type(root: &SyntaxNode, bound_var: &str) -> Option<NameWithType> {
                                 if name.text() == component_aspect {
                                     if let Some(name_prop) = expr.prop() {
                                         debug!("Found nested name: {name_prop:?}");
-                                        parent.children.push(NameWithType {
+                                        props.insert(NameWithType {
                                             name: name_prop.text(),
                                             expr: expr.object(),
-                                            children: Vec::new(),
-                                        })
+                                        });
                                     }
                                 }
                             }
 
-                            expand_dot_expr(nested_dot, parent, component_aspect)
+                            expand_dot_expr(nested_dot, props, component_aspect)
                         }
                         Some(Expr::NameRef(name_ref)) => {
                             let name = name_ref.text();
@@ -247,11 +229,10 @@ fn build_type(root: &SyntaxNode, bound_var: &str) -> Option<NameWithType> {
                             if name == component_aspect {
                                 if let Some(name_prop) = expr.prop() {
                                     debug!("Found nested name: {name_prop:?}");
-                                    parent.children.push(NameWithType {
+                                    props.insert(NameWithType {
                                         name: name_prop.text(),
                                         expr: expr.object(),
-                                        children: Vec::new(),
-                                    })
+                                    });
                                 }
                             }
                         }
@@ -261,16 +242,16 @@ fn build_type(root: &SyntaxNode, bound_var: &str) -> Option<NameWithType> {
                     }
                 }
                 let dot_expr = descendant.to::<DotExpr>();
-                expand_dot_expr(dot_expr, &mut root_type, bound_var)
+                expand_dot_expr(dot_expr, &mut props_fields, component_aspect)
             }
             _ => (),
         }
     }
 
-    Some(root_type)
+    props_fields
 }
 
-fn create_type_definition(fields: Option<NameWithType>, name: &str) -> String {
+fn create_type_definition(fields: BTreeSet<NameWithType>, name: &str) -> String {
     let mut props = String::from("");
     for field in fields {
         let resolved_type = get_surrounding_expression(field.expr).unwrap_or(String::from("any"));
