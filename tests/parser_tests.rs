@@ -654,4 +654,32 @@ function foo(a: any, b: B, c: any) {
 }",
         );
     }
+
+    #[test]
+    fn add_types_params_usage_function_in_function() {
+        compare(
+            "
+function foo(a, b, c) {
+    console.log(a);
+    b.callableField(doThing(c));
+}
+
+function doThing(x) {
+    return x;
+}",
+            "
+interface B {
+    callableField: Function,
+}
+
+function foo(a: any, b: B, c: any) {
+    console.log(a);
+    b.callableField(doThing(c));
+}
+
+function doThing(x: any) {
+    return x;
+}",
+        );
+    }
 }
