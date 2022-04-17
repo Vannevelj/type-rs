@@ -597,6 +597,29 @@ function foo(a: any, b: B, c: any) {
     }
 
     #[test]
+    fn add_types_function_object_params_with_usage_multi() {
+        compare(
+            "
+function foo(a, b, c) {
+    console.log(a);
+    console.log(b.field);
+    console.log(b.otherfield);
+}",
+            "
+interface B {
+    field: any,
+    otherfield: any,
+}
+
+function foo(a: any, b: B, c: any) {
+    console.log(a);
+    console.log(b.field);
+    console.log(b.otherfield);
+}",
+        );
+    }
+
+    #[test]
     fn add_types_function_object_params_nested() {
         compare(
             "
