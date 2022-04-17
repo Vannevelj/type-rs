@@ -438,7 +438,7 @@ interface Props {
 }
 
 interface State {
-    testNumber: any,
+    testNumber: number,
 }
 
 class MyComponent extends Component<Props, State> {
@@ -592,6 +592,45 @@ interface B {
 function foo(a: any, b: B, c: any) {
     console.log(a);
     console.log(b.field);
+}",
+        );
+    }
+    #[test]
+    fn add_types_params_usage_number() {
+        compare(
+            "
+function foo(a, b, c) {
+    console.log(a);
+    b.field = 5;
+}",
+            "
+interface B {
+    field: number,
+}
+
+function foo(a: any, b: B, c: any) {
+    console.log(a);
+    b.field = 5;
+}",
+        );
+    }
+
+    #[test]
+    fn add_types_params_usage_string() {
+        compare(
+            "
+function foo(a, b, c) {
+    console.log(a);
+    b.field = \"hello\";
+}",
+            "
+interface B {
+    field: string,
+}
+
+function foo(a: any, b: B, c: any) {
+    console.log(a);
+    b.field = \"hello\";
 }",
         );
     }

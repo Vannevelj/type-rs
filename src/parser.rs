@@ -3,14 +3,32 @@ use log::{debug, trace};
 use rslint_parser::{
     ast::{
         ArrowExpr, CatchClause, ClassDecl, Constructor, Declarator, DotExpr, Expr, ExprOrSpread,
-        FnDecl, FnExpr, ForStmtInit, LiteralKind, Method, Name, ObjectPattern, ParameterList,
-        Pattern,
+        ExprStmt, FnDecl, FnExpr, ForStmtInit, LiteralKind, Method, Name, ObjectPattern,
+        ParameterList, Pattern,
     },
     parse_with_syntax, AstNode, Syntax, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
-use std::collections::BTreeSet;
+use std::{cmp::Ordering, collections::BTreeSet};
 
 use crate::text_editor::{TextEdit, TextEditor};
+
+#[derive(Debug, Hash, PartialEq, Eq, Clone)]
+struct NameWithType {
+    name: String,
+    expr: Option<Expr>,
+}
+
+impl Ord for NameWithType {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.name.cmp(&other.name)
+    }
+}
+
+impl PartialOrd for NameWithType {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
 
 pub fn add_types(contents: String) -> String {
     let syntax = Syntax::default().typescript();
@@ -143,7 +161,7 @@ pub fn add_types(contents: String) -> String {
     fixer.apply()
 }
 
-fn gather_usages(root: &SyntaxNode, component_aspect: &str) -> BTreeSet<String> {
+fn gather_usages(root: &SyntaxNode, component_aspect: &str) -> BTreeSet<NameWithType> {
     let mut props_fields = BTreeSet::new();
 
     for descendant in root.descendants() {
@@ -151,7 +169,7 @@ fn gather_usages(root: &SyntaxNode, component_aspect: &str) -> BTreeSet<String> 
             SyntaxKind::DOT_EXPR => {
                 fn expand_dot_expr(
                     expr: DotExpr,
-                    props: &mut BTreeSet<String>,
+                    props: &mut BTreeSet<NameWithType>,
                     component_aspect: &str,
                 ) {
                     debug!(
@@ -176,7 +194,10 @@ fn gather_usages(root: &SyntaxNode, component_aspect: &str) -> BTreeSet<String> 
                                 debug!("Found child name: {name} (looking for {component_aspect})");
                                 if name.text() == component_aspect {
                                     for element in object_pattern.elements() {
-                                        props.insert(element.text());
+                                        props.insert(NameWithType {
+                                            name: element.text(),
+                                            expr: expr.object(),
+                                        });
                                     }
                                 }
                             }
@@ -191,7 +212,10 @@ fn gather_usages(root: &SyntaxNode, component_aspect: &str) -> BTreeSet<String> 
                                 if name.text() == component_aspect {
                                     if let Some(name_prop) = expr.prop() {
                                         debug!("Found nested name: {name_prop:?}");
-                                        props.insert(name_prop.text());
+                                        props.insert(NameWithType {
+                                            name: name_prop.text(),
+                                            expr: expr.object(),
+                                        });
                                     }
                                 }
                             }
@@ -205,7 +229,10 @@ fn gather_usages(root: &SyntaxNode, component_aspect: &str) -> BTreeSet<String> 
                             if name == component_aspect {
                                 if let Some(name_prop) = expr.prop() {
                                     debug!("Found nested name: {name_prop:?}");
-                                    props.insert(name_prop.text());
+                                    props.insert(NameWithType {
+                                        name: name_prop.text(),
+                                        expr: expr.object(),
+                                    });
                                 }
                             }
                         }
@@ -224,10 +251,11 @@ fn gather_usages(root: &SyntaxNode, component_aspect: &str) -> BTreeSet<String> 
     props_fields
 }
 
-fn create_type_definition(fields: BTreeSet<String>, name: &str) -> String {
+fn create_type_definition(fields: BTreeSet<NameWithType>, name: &str) -> String {
     let mut props = String::from("");
     for field in fields {
-        props += format!("    {field}: any,\n").as_str();
+        let resolved_type = get_surrounding_expression(field.expr).unwrap_or(String::from("any"));
+        props += format!("    {}: {},\n", field.name, resolved_type).as_str();
     }
 
     format!(
@@ -287,6 +315,18 @@ fn update_pattern(
     }
 }
 
+fn get_surrounding_expression(expr: Option<Expr>) -> Option<String> {
+    let expr_statement = expr?
+        .syntax()
+        .ancestors()
+        .find(|anc| anc.is::<ExprStmt>())
+        .map(|anc| anc.to::<ExprStmt>());
+
+    debug!("surrounding expression: {:?}", expr_statement);
+
+    get_type_from_expression(expr_statement?.expr(), &None)
+}
+
 fn get_type_from_expression(expr: Option<Expr>, created_type: &Option<String>) -> Option<String> {
     trace!("expr: {expr:?}");
     if created_type.is_some() {
@@ -327,6 +367,9 @@ fn get_type_from_expression(expr: Option<Expr>, created_type: &Option<String>) -
         }
         Some(Expr::ObjectExpr(_)) | None => Some(String::from("any")),
         Some(Expr::NameRef(nr)) if nr.text() == "undefined" => Some(String::from("any")), 
+        Some(Expr::AssignExpr(assign_expr)) => {
+            get_type_from_expression(assign_expr.rhs(), created_type)
+        }
         _ => None
 
         // Expr::ArrowExpr(_) => todo!(),
@@ -339,7 +382,6 @@ fn get_type_from_expression(expr: Option<Expr>, created_type: &Option<String>) -
         // Expr::UnaryExpr(_) => todo!(),
         // Expr::BinExpr(_) => todo!(),
         // Expr::CondExpr(_) => todo!(),
-        // Expr::AssignExpr(_) => todo!(),
         // Expr::SequenceExpr(_) => todo!(),
         // Expr::FnExpr(_) => todo!(),
         // Expr::ClassExpr(_) => todo!(),
