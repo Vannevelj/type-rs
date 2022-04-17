@@ -2,9 +2,9 @@ use inflector::Inflector;
 use log::{debug, trace};
 use rslint_parser::{
     ast::{
-        ArrowExpr, CatchClause, ClassDecl, Constructor, Declarator, DotExpr, Expr, ExprOrSpread,
-        ExprStmt, FnDecl, FnExpr, ForStmtInit, LiteralKind, Method, Name, ObjectPattern,
-        ParameterList, Pattern,
+        ArgList, ArrowExpr, CatchClause, ClassDecl, Constructor, Declarator, DotExpr, Expr,
+        ExprOrSpread, ExprStmt, FnDecl, FnExpr, ForStmtInit, LiteralKind, Method, Name,
+        ObjectPattern, ParameterList, Pattern,
     },
     parse_with_syntax, AstNode, Syntax, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
@@ -319,6 +319,7 @@ fn get_surrounding_expression(expr: Option<Expr>) -> Option<String> {
     let expr_statement = expr?
         .syntax()
         .ancestors()
+        .take_while(|anc| !anc.is::<ArgList>() && !anc.is::<ParameterList>())
         .find(|anc| anc.is::<ExprStmt>())
         .map(|anc| anc.to::<ExprStmt>());
 
@@ -370,6 +371,13 @@ fn get_type_from_expression(expr: Option<Expr>, created_type: &Option<String>) -
         Some(Expr::AssignExpr(assign_expr)) => {
             get_type_from_expression(assign_expr.rhs(), created_type)
         }
+        // FIXME: use more specific function signatures
+        Some(Expr::CallExpr(call_expr)) => {
+            if call_expr.callee()?.text() == "BigInt" {
+                return Some(String::from("BigInt"));
+            }
+            Some(String::from("Function"))
+        },
         _ => None
 
         // Expr::ArrowExpr(_) => todo!(),

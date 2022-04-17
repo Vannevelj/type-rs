@@ -109,7 +109,7 @@ mod tests {
     fn add_types_function_default_value_bigint_ctor() {
         compare(
             "function foo(a = BigInt(9007199254740991)) {}",
-            "function foo(a = BigInt(9007199254740991)) {}",
+            "function foo(a: BigInt = BigInt(9007199254740991)) {}",
         );
     }
 
@@ -432,7 +432,7 @@ class MyComponent extends Component {
 }",
             "
 interface Props {
-    callback: any,
+    callback: Function,
     otherone: any,
     wowee: any,
 }
@@ -631,6 +631,26 @@ interface B {
 function foo(a: any, b: B, c: any) {
     console.log(a);
     b.field = \"hello\";
+}",
+        );
+    }
+
+    #[test]
+    fn add_types_params_usage_function() {
+        compare(
+            "
+function foo(a, b, c) {
+    console.log(a);
+    b.callableField();
+}",
+            "
+interface B {
+    callableField: Function,
+}
+
+function foo(a: any, b: B, c: any) {
+    console.log(a);
+    b.callableField();
 }",
         );
     }
