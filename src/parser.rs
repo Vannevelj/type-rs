@@ -10,7 +10,7 @@ use rslint_parser::{
 
 use crate::{
     text_editor::{TextEdit, TextEditor},
-    type_definition::{create_type_definition, gather_usages, get_type_from_expression, TypeDef},
+    type_definition::{create_type_definition, define_type_based_on_usage, get_type_from_expression, TypeDef},
 };
 
 pub fn add_types(contents: String) -> String {
@@ -38,7 +38,7 @@ pub fn add_types(contents: String) -> String {
                 for param in param_list.parameters() {
                     let parameter_name = param.text();
                     let new_parameter_type = parameter_name.to_pascal_case();
-                    let param_usages = gather_usages(&outer_scope, parameter_name.as_str());
+                    let param_usages = define_type_based_on_usage(&outer_scope, parameter_name.as_str());
                     debug!("Found param_usages: {param_usages:?} ({parameter_name})");
 
                     match param_usages.ts_type {
@@ -92,8 +92,8 @@ pub fn add_types(contents: String) -> String {
             }
             SyntaxKind::CLASS_DECL => {
                 let class = descendant.to::<ClassDecl>();
-                let props_fields = gather_usages(&ast, "props");
-                let state_fields = gather_usages(&ast, "state");
+                let props_fields = define_type_based_on_usage(&ast, "props");
+                let state_fields = define_type_based_on_usage(&ast, "state");
                 debug!("Found props: {props_fields:?}");
 
                 match class.parent() {

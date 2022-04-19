@@ -64,7 +64,7 @@ impl PartialOrd for TypeDefinition {
 
 // WIP: change this to return a single NameWithType (rename that?)
 // Build a tree of the type, going deeper when encountering a DOT_EXPR or destructuring, then render tree
-pub fn gather_usages(root: &SyntaxNode, component_aspect: &str) -> TypeDefinition {
+pub fn define_type_based_on_usage(root: &SyntaxNode, component_aspect: &str) -> TypeDefinition {
     let mut root_type = TypeDefinition::new(component_aspect.to_string(), None);
 
     for descendant in root.descendants() {
