@@ -1,3 +1,4 @@
+use log::debug;
 use rslint_parser::TextRange;
 
 struct Change(usize, String);
@@ -23,11 +24,13 @@ impl TextEdit for TextEditor {
     }
 
     fn insert_after(&mut self, range: TextRange, text: impl ToString) {
+        debug!("FIXER insert_after: {:?}", range);
         self.changes
             .push(Change(range.end().into(), text.to_string()));
     }
 
     fn insert_before(&mut self, range: TextRange, text: impl ToString) {
+        debug!("FIXER insert_before: {:?}", range);
         self.changes
             .push(Change(range.start().into(), text.to_string()));
     }

@@ -2,16 +2,15 @@ use inflector::Inflector;
 use log::{debug, trace};
 use rslint_parser::{
     ast::{
-        ArgList, ArrowExpr, CatchClause, ClassDecl, Constructor, Declarator, Expr, ExprOrSpread,
-        ExprStmt, FnDecl, FnExpr, ForStmtInit, LiteralKind, Method, Name, ParameterList, Pattern,
+        ArrowExpr, CatchClause, ClassDecl, Constructor, Declarator, Expr, FnDecl, FnExpr,
+        ForStmtInit, Method, Name, ParameterList, Pattern,
     },
     parse_with_syntax, AstNode, Syntax, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
-use std::collections::BTreeSet;
 
 use crate::{
     text_editor::{TextEdit, TextEditor},
-    type_definition::{gather_usages, NameWithType},
+    type_definition::{create_type_definition, gather_usages, get_type_from_expression, TypeDef},
 };
 
 pub fn add_types(contents: String) -> String {
@@ -42,17 +41,16 @@ pub fn add_types(contents: String) -> String {
                     let param_usages = gather_usages(&outer_scope, parameter_name.as_str());
                     debug!("Found param_usages: {param_usages:?} ({parameter_name})");
 
-                    match param_usages.len() {
-                        1.. => {
-                            debug!("FIXER insert: {:?}", start_of_file);
+                    match param_usages.ts_type {
+                        TypeDef::SimpleType(expr) if expr.is_none() => {
+                            update_pattern(&param, &mut fixer, None, None);
+                        }
+                        _ => {
                             fixer.insert_before(
                                 start_of_file,
                                 create_type_definition(param_usages, new_parameter_type.as_str()),
                             );
                             update_pattern(&param, &mut fixer, None, Some(new_parameter_type));
-                        }
-                        _ => {
-                            update_pattern(&param, &mut fixer, None, None);
                         }
                     }
                 }
@@ -102,34 +100,28 @@ pub fn add_types(contents: String) -> String {
                     Some(parent) if is_react_component_class(&parent) => {
                         match (
                             class.parent_type_args(),
-                            props_fields.len(),
-                            state_fields.len(),
+                            &props_fields.ts_type,
+                            &state_fields.ts_type,
                         ) {
-                            (None, .., 1..) => {
-                                debug!("FIXER insert: {:?}", start_of_file);
+                            (None, .., TypeDef::NestedType(_)) => {
                                 fixer.insert_before(
                                     start_of_file,
                                     create_type_definition(props_fields, "Props"),
                                 );
-                                debug!("FIXER insert: {:?}", start_of_file);
                                 fixer.insert_before(
                                     start_of_file,
                                     create_type_definition(state_fields, "State"),
                                 );
-                                debug!("FIXER insert: {:?}", parent.range());
                                 fixer.insert_after(parent.range(), "<Props, State>")
                             }
-                            (None, 1.., 0) => {
-                                debug!("FIXER insert: {:?}", start_of_file);
+                            (None, TypeDef::NestedType(_), TypeDef::SimpleType(_)) => {
                                 fixer.insert_before(
                                     start_of_file,
                                     create_type_definition(props_fields, "Props"),
                                 );
-                                debug!("FIXER insert: {:?}", parent.range());
                                 fixer.insert_after(parent.range(), "<Props>")
                             }
-                            (None, 0, 0) => {
-                                debug!("FIXER insert: {:?}", parent.range());
+                            (None, TypeDef::SimpleType(_), TypeDef::SimpleType(_)) => {
                                 fixer.insert_after(parent.range(), "<any, any>")
                             }
                             _ => continue,
@@ -143,22 +135,6 @@ pub fn add_types(contents: String) -> String {
     }
 
     fixer.apply()
-}
-
-fn create_type_definition(fields: BTreeSet<NameWithType>, name: &str) -> String {
-    let mut props = String::from("");
-    for field in fields {
-        let resolved_type = get_surrounding_expression(field.expr).unwrap_or(String::from("any"));
-        props += format!("    {}: {},\n", field.name, resolved_type).as_str();
-    }
-
-    format!(
-        "
-interface {name} {{
-{}}}
-",
-        props
-    )
 }
 
 fn update_pattern(
@@ -206,97 +182,6 @@ fn update_pattern(
         // }
         // Pattern::ExprPattern(_) => todo!(),
         _ => (),
-    }
-}
-
-fn get_surrounding_expression(expr: Option<Expr>) -> Option<String> {
-    let expr_statement = expr?
-        .syntax()
-        .ancestors()
-        .take_while(|anc| !anc.is::<ArgList>() && !anc.is::<ParameterList>())
-        .find(|anc| anc.is::<ExprStmt>())
-        .map(|anc| anc.to::<ExprStmt>());
-
-    debug!("surrounding expression: {:?}", expr_statement);
-
-    get_type_from_expression(expr_statement?.expr(), &None)
-}
-
-fn get_type_from_expression(expr: Option<Expr>, created_type: &Option<String>) -> Option<String> {
-    trace!("expr: {expr:?}");
-    if created_type.is_some() {
-        return created_type.clone();
-    }
-
-    match expr {
-        Some(Expr::ArrayExpr(array)) => {
-            let default_return = Some(String::from("any[]"));
-            let mut found_type = None;
-            for element in array.elements() {
-                if let ExprOrSpread::Expr(expr) = element {
-                    let expression_type = get_type_from_expression(Some(expr), created_type);
-                    match expression_type {
-                        Some(element_type) => {
-                            match found_type {
-                                // FIXME: we can make this smarter by constructing a union type, e.g. `(string | number)[]`
-                                Some(t) if t != element_type => return default_return,
-                                _ => found_type = Some(format!("{}[]", element_type))
-                            }
-                        }
-                        None => return None
-                    }
-                }
-            }
-
-            found_type.or(default_return)
-        },
-        Some(Expr::Literal(literal)) => {
-            match literal.kind() {
-                LiteralKind::Number(_) => Some(String::from("number")),
-                LiteralKind::BigInt(_) => Some(String::from("BigInt")),
-                LiteralKind::String => Some(String::from("string")),
-                LiteralKind::Null => Some(String::from("any")),
-                LiteralKind::Bool(_) => Some(String::from("boolean")),
-                LiteralKind::Regex => Some(String::from("RegExp")),
-            }
-        }
-        Some(Expr::ObjectExpr(_)) | None => Some(String::from("any")),
-        Some(Expr::NameRef(nr)) if nr.text() == "undefined" => Some(String::from("any")), 
-        Some(Expr::AssignExpr(assign_expr)) => {
-            get_type_from_expression(assign_expr.rhs(), created_type)
-        }
-        // FIXME: use more specific function signatures
-        Some(Expr::CallExpr(call_expr)) => {
-            if call_expr.callee()?.text() == "BigInt" {
-                return Some(String::from("BigInt"));
-            }
-            Some(String::from("Function"))
-        },
-        _ => None
-
-        // Expr::ArrowExpr(_) => todo!(),
-        // Expr::Template(_) => todo!(),
-        // Expr::ThisExpr(_) => todo!(),
-        // Expr::ObjectExpr(_) => todo!(),
-        // Expr::GroupingExpr(_) => todo!(),
-        // Expr::BracketExpr(_) => todo!(),
-        // Expr::DotExpr(_) => todo!(),
-        // Expr::UnaryExpr(_) => todo!(),
-        // Expr::BinExpr(_) => todo!(),
-        // Expr::CondExpr(_) => todo!(),
-        // Expr::SequenceExpr(_) => todo!(),
-        // Expr::FnExpr(_) => todo!(),
-        // Expr::ClassExpr(_) => todo!(),
-        // Expr::NewTarget(_) => todo!(),
-        // Expr::ImportMeta(_) => todo!(),
-        // Expr::SuperCall(_) => todo!(),
-        // Expr::ImportCall(_) => todo!(),
-        // Expr::YieldExpr(_) => todo!(),
-        // Expr::AwaitExpr(_) => todo!(),
-        // Expr::PrivatePropAccess(_) => todo!(),
-        // Expr::TsNonNull(_) => todo!(),
-        // Expr::TsAssertion(_) => todo!(),
-        // Expr::TsConstAssertion(_) => todo!(),
     }
 }
 
