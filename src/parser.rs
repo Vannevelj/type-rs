@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use inflector::Inflector;
 use log::{debug, trace};
 use rslint_parser::{
@@ -10,7 +12,10 @@ use rslint_parser::{
 
 use crate::{
     text_editor::{TextEdit, TextEditor},
-    type_definition::{create_type_definition, define_type_based_on_usage, get_type_from_expression, TypeDef},
+    type_definition::{
+        create_type_definition, define_type_based_on_usage, get_type_from_expression, TypeDef,
+        TypeDefinition,
+    },
 };
 
 pub fn add_types(contents: String) -> String {
@@ -38,17 +43,18 @@ pub fn add_types(contents: String) -> String {
                 for param in param_list.parameters() {
                     let parameter_name = param.text();
                     let new_parameter_type = parameter_name.to_pascal_case();
-                    let param_usages = define_type_based_on_usage(&outer_scope, parameter_name.as_str());
+                    let param_usages =
+                        define_type_based_on_usage(&outer_scope, parameter_name.as_str());
                     debug!("Found param_usages: {param_usages:?} ({parameter_name})");
 
-                    match param_usages.ts_type {
-                        TypeDef::SimpleType(expr) if expr.is_none() => {
+                    match param_usages {
+                        None => {
                             update_pattern(&param, &mut fixer, None, None);
                         }
-                        _ => {
+                        Some(ref usages) => {
                             fixer.insert_before(
                                 start_of_file,
-                                create_type_definition(param_usages, new_parameter_type.as_str()),
+                                create_type_definition(usages, new_parameter_type.as_str()),
                             );
                             update_pattern(&param, &mut fixer, None, Some(new_parameter_type));
                         }
@@ -98,32 +104,30 @@ pub fn add_types(contents: String) -> String {
 
                 match class.parent() {
                     Some(parent) if is_react_component_class(&parent) => {
-                        match (
-                            class.parent_type_args(),
-                            &props_fields.ts_type,
-                            &state_fields.ts_type,
-                        ) {
-                            (None, .., TypeDef::NestedType(_)) => {
+                        match (class.parent_type_args(), &props_fields, &state_fields) {
+                            (None, .., Some(state_usages)) => {
+                                let props_definition = props_fields.unwrap_or(TypeDefinition {
+                                    name: "Props".to_string(),
+                                    ts_type: TypeDef::NestedType(BTreeSet::new()),
+                                });
                                 fixer.insert_before(
                                     start_of_file,
-                                    create_type_definition(props_fields, "Props"),
+                                    create_type_definition(&props_definition, "Props"),
                                 );
                                 fixer.insert_before(
                                     start_of_file,
-                                    create_type_definition(state_fields, "State"),
+                                    create_type_definition(state_usages, "State"),
                                 );
                                 fixer.insert_after(parent.range(), "<Props, State>")
                             }
-                            (None, TypeDef::NestedType(_), TypeDef::SimpleType(_)) => {
+                            (None, Some(props_usages), None) => {
                                 fixer.insert_before(
                                     start_of_file,
-                                    create_type_definition(props_fields, "Props"),
+                                    create_type_definition(props_usages, "Props"),
                                 );
                                 fixer.insert_after(parent.range(), "<Props>")
                             }
-                            (None, TypeDef::SimpleType(_), TypeDef::SimpleType(_)) => {
-                                fixer.insert_after(parent.range(), "<any, any>")
-                            }
+                            (None, None, None) => fixer.insert_after(parent.range(), "<any, any>"),
                             _ => continue,
                         };
                     }

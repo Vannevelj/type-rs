@@ -64,24 +64,27 @@ impl PartialOrd for TypeDefinition {
 
 // WIP: change this to return a single NameWithType (rename that?)
 // Build a tree of the type, going deeper when encountering a DOT_EXPR or destructuring, then render tree
-pub fn define_type_based_on_usage(root: &SyntaxNode, component_aspect: &str) -> TypeDefinition {
-    let mut root_type = TypeDefinition::new(component_aspect.to_string(), None);
+pub fn define_type_based_on_usage(
+    root: &SyntaxNode,
+    component_aspect: &str,
+) -> Option<TypeDefinition> {
+    let mut root_type: Option<TypeDefinition> = None;
 
     for descendant in root.descendants() {
         match descendant.kind() {
             SyntaxKind::DOT_EXPR => {
                 fn expand_dot_expr(
                     expr: DotExpr,
-                    parent: &mut TypeDefinition,
+                    parent: &mut Option<TypeDefinition>,
                     component_aspect: &str,
-                ) {
+                ) -> Option<TypeDefinition> {
                     debug!(
                         "Found dot_expr: {expr:?} [{:?}: {:?}]",
                         expr.object(),
                         expr.prop()
                     );
 
-                    let mut child_props: BTreeSet<TypeDefinition> = BTreeSet::new();
+                    let mut child_prop: Option<TypeDefinition> = None;
 
                     if let Some(declarator) =
                         expr.syntax().ancestors().find(|anc| anc.is::<Declarator>())
@@ -99,7 +102,7 @@ pub fn define_type_based_on_usage(root: &SyntaxNode, component_aspect: &str) -> 
                                 debug!("Found child name: {name} (looking for {component_aspect})");
                                 if name.text() == component_aspect {
                                     for element in object_pattern.elements() {
-                                        child_props.insert(TypeDefinition::new(
+                                        child_prop = Some(TypeDefinition::new(
                                             element.text(),
                                             expr.object(),
                                         ));
@@ -117,19 +120,19 @@ pub fn define_type_based_on_usage(root: &SyntaxNode, component_aspect: &str) -> 
                                 if name.text() == component_aspect {
                                     if let Some(name_prop) = expr.prop() {
                                         debug!("Found nested name: {name_prop:?}");
-                                        let mut child_prop =
+                                        let new_child_prop =
                                             TypeDefinition::new(name_prop.text(), expr.object());
                                         // expand_dot_expr(
                                         //     nested_dot,
                                         //     &mut child_prop,
                                         //     component_aspect,
                                         // );
-                                        child_props.insert(child_prop);
+                                        child_prop = Some(new_child_prop);
                                     }
                                 }
                             }
 
-                            expand_dot_expr(nested_dot, parent, component_aspect)
+                            return expand_dot_expr(nested_dot, parent, component_aspect);
                         }
                         Some(Expr::NameRef(name_ref)) => {
                             let name = name_ref.text();
@@ -138,10 +141,8 @@ pub fn define_type_based_on_usage(root: &SyntaxNode, component_aspect: &str) -> 
                             if name == component_aspect {
                                 if let Some(name_prop) = expr.prop() {
                                     debug!("Found nested name: {name_prop:?}");
-                                    child_props.insert(TypeDefinition::new(
-                                        name_prop.text(),
-                                        expr.object(),
-                                    ));
+                                    child_prop =
+                                        Some(TypeDefinition::new(name_prop.text(), expr.object()));
                                 }
                             }
                         }
@@ -150,12 +151,19 @@ pub fn define_type_based_on_usage(root: &SyntaxNode, component_aspect: &str) -> 
                         }
                     }
 
-                    if !child_props.is_empty() {
-                        parent.ts_type = TypeDef::NestedType(child_props)
+                    match (parent, child_prop) {
+                        (None, Some(child)) => Some(child),
+                        (Some(parent), Some(child)) => {
+                            let mut children = BTreeSet::new();
+                            children.insert(child);
+                            parent.ts_type = TypeDef::NestedType(children);
+                            Some(parent.clone())
+                        }
+                        _ => None,
                     }
                 }
                 let dot_expr = descendant.to::<DotExpr>();
-                expand_dot_expr(dot_expr, &mut root_type, component_aspect)
+                root_type = expand_dot_expr(dot_expr, &mut root_type, component_aspect)
             }
             _ => (),
         }
@@ -265,7 +273,7 @@ pub fn get_type_from_expression(
     }
 }
 
-pub fn create_type_definition(def: TypeDefinition, name: &str) -> String {
+pub fn create_type_definition(def: &TypeDefinition, name: &str) -> String {
     let definition = def.render(1);
 
     format!(
