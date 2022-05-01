@@ -52,6 +52,20 @@ impl TypeDefinition {
 
         buf.clone()
     }
+
+    fn add_field(&mut self, new_type_def: TypeDefinition) {
+        match self.ts_type {
+            TypeDef::SimpleType(_) => {
+                let mut children = BTreeSet::new();
+                children.insert(new_type_def);
+                let new_type = TypeDef::NestedType(children);
+                self.ts_type = new_type;
+            }
+            TypeDef::NestedType(ref mut nested_type) => {
+                nested_type.insert(new_type_def);
+            }
+        }
+    }
 }
 
 impl Ord for TypeDefinition {
@@ -116,6 +130,7 @@ fn create_type_definition_structure(
     mut path: Vec<String>,
 ) -> TypeDefinition {
     let mut current_type_to_add_to = parent_definition;
+    debug!("path: {path:?}");
 
     if let Some(name_prop) = current_dot_expr.prop() {
         debug!(
@@ -130,21 +145,14 @@ fn create_type_definition_structure(
         if let Some(parent) = parent {
             if parent.is::<DotExpr>() {
                 let child_dot_expr = parent.to::<DotExpr>();
-                debug!("Returning create_type_definition_structure()");
-                let child_structure =
+                debug!("Entering create_type_definition_structure()");
+                let type_with_children =
                     create_type_definition_structure(new_type_def, child_dot_expr, path);
-                match current_type_to_add_to.ts_type {
-                    TypeDef::SimpleType(_) => {
-                        let mut children = BTreeSet::new();
-                        children.insert(child_structure);
-                        let new_type = TypeDef::NestedType(children);
-                        current_type_to_add_to.ts_type = new_type;
-                    }
-                    TypeDef::NestedType(ref mut nested_type) => {
-                        nested_type.insert(child_structure);
-                    }
-                }
+
+                current_type_to_add_to.add_field(type_with_children);
             }
+        } else {
+            current_type_to_add_to.add_field(new_type_def);
         }
     }
 
