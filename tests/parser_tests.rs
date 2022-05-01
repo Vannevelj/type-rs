@@ -644,6 +644,32 @@ class MyComponent extends Component<Props> {
     }
 
     #[test]
+    fn add_types_generate_props_destructured_combined() {
+        compare(
+            "
+class MyComponent extends Component { 
+    function test() {
+        const { somefield } = this.props;
+        console.log(this.props.somefield.wowee)
+    }
+}",
+            "
+interface Props {
+    somefield: {
+        wowee: any,
+    },
+}
+
+class MyComponent extends Component<Props> { 
+    function test() {
+        const { somefield } = this.props;
+        console.log(this.props.somefield.wowee)
+    }
+}",
+        )
+    }
+
+    #[test]
     fn add_types_generate_props_functional_component() {
         compare(
             "
