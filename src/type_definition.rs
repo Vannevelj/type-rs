@@ -87,7 +87,7 @@ pub fn define_type_based_on_usage(
     root: &SyntaxNode,
     component_aspect: &str,
 ) -> Option<TypeDefinition> {
-    let root_type = TypeDefinition {
+    let mut root_type = TypeDefinition {
         name: component_aspect.to_string(),
         ts_type: TypeDef::SimpleType(None),
     };
@@ -110,7 +110,7 @@ pub fn define_type_based_on_usage(
                     _ => continue,
                 }
 
-                create_type_definition_structure(root_type.clone(), current_dot_expr, vec![]);
+                root_type = create_type_definition_structure(root_type.clone(), current_dot_expr, vec![])
             }
             _ => (),
         }
@@ -157,7 +157,7 @@ fn create_type_definition_structure(parent_definition: TypeDefinition, current_d
 
             current_type.clone()
         },
-        None => parent_definition.to_owned(),
+        None => parent_definition,
     }
 }
 
