@@ -274,8 +274,7 @@ pub fn create_type_definition(def: &TypeDefinition, name: &str) -> String {
     format!(
         "
 interface {name} {{
-{}
-}}
+{}}}
 ",
         definition
     )
