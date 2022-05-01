@@ -61,19 +61,21 @@ impl TypeDefinition {
     }
 
     pub fn add_field(&mut self, new_type_def: &mut TypeDefinition) {
-        match &mut self.ts_type {
+        match self.ts_type {
             TypeDef::SimpleType(_) => {
+                debug!("Adding field: simple type");
                 self.add_child(vec![new_type_def.clone()]);
             }
             TypeDef::NestedType(_) => {
                 // Does the type already have the field we want to insert? If so, merge them together
+                debug!("Adding field: nested type");
                 self.merge(new_type_def);
             }
         }
     }
 
     fn add_child(&mut self, children: Vec<TypeDefinition>) {
-        match &mut self.ts_type {
+        match self.ts_type {
             TypeDef::SimpleType(_) => {
                 let children = Vec::new();
                 let new_type = TypeDef::NestedType(children);
@@ -88,21 +90,21 @@ impl TypeDefinition {
     }
 
     fn get_children(&mut self) -> Option<&mut Vec<TypeDefinition>> {
-        match &mut self.ts_type {
+        match self.ts_type {
             TypeDef::SimpleType(_) => None,
-            TypeDef::NestedType(children) => Some(children),
+            TypeDef::NestedType(ref mut children) => Some(children),
         }
     }
 
     fn merge(&mut self, other: &mut TypeDefinition) {
-        let mut existing_definition = self
+        let existing_definition = self
             .get_children()
             .unwrap()
             .iter_mut()
             .find(|n| n.name.eq(&other.name));
 
         match existing_definition {
-            Some(ref mut definition) => match other.ts_type {
+            Some(definition) => match other.ts_type {
                 TypeDef::SimpleType(_) => (),
                 TypeDef::NestedType(ref mut new_nested_definitions) => {
                     definition.add_child(new_nested_definitions.clone());
