@@ -150,9 +150,9 @@ fn create_type_definition_structure(
                     create_type_definition_structure(new_type_def, child_dot_expr, path);
 
                 current_type_to_add_to.add_field(type_with_children);
+            } else {
+                current_type_to_add_to.add_field(new_type_def);
             }
-        } else {
-            current_type_to_add_to.add_field(new_type_def);
         }
     }
 
