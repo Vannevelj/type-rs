@@ -620,23 +620,21 @@ function foo(a: any, b: B, c: any) {
     }
 
     #[test]
-    fn add_types_function_object_params_nested() {
+    fn add_types_function_object_params_nested_reduced() {
         compare(
             "
-function foo(a, b, c) {
-    console.log(a);
-    console.log(b.field.nested);
+function foo(a) {
+    a.sa.nestedlongname();
 }",
             "
-interface B {
-    field: {
-        nested: any,
+interface A {
+    sa: {
+        nestedlongname: Function,
     },
 }
 
-function foo(a: any, b: B, c: any) {
-    console.log(a);
-    console.log(b.field.nested);
+function foo(a: A) {
+    a.sa.nestedlongname();
 }",
         );
     }
