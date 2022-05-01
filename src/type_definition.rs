@@ -126,34 +126,30 @@ fn create_type_definition_structure(
         let new_type_def = TypeDefinition::new(name_prop.text(), current_dot_expr.object());
         path.push(name_prop.text());
 
-        match current_type_to_add_to.ts_type {
-            TypeDef::SimpleType(_) => {
-                let mut children = BTreeSet::new();
-                children.insert(new_type_def);
-                let new_type = TypeDef::NestedType(children);
-                current_type_to_add_to.ts_type = new_type;
-            }
-            TypeDef::NestedType(ref mut nested_type) => {
-                nested_type.insert(new_type_def);
-            }
-        }
-
         let parent = current_dot_expr.syntax().parent();
         if let Some(parent) = parent {
             if parent.is::<DotExpr>() {
                 let child_dot_expr = parent.to::<DotExpr>();
                 debug!("Returning create_type_definition_structure()");
-                return create_type_definition_structure(
-                    current_type_to_add_to.clone(),
-                    child_dot_expr,
-                    path,
-                );
+                let child_structure =
+                    create_type_definition_structure(new_type_def, child_dot_expr, path);
+                match current_type_to_add_to.ts_type {
+                    TypeDef::SimpleType(_) => {
+                        let mut children = BTreeSet::new();
+                        children.insert(child_structure);
+                        let new_type = TypeDef::NestedType(children);
+                        current_type_to_add_to.ts_type = new_type;
+                    }
+                    TypeDef::NestedType(ref mut nested_type) => {
+                        nested_type.insert(child_structure);
+                    }
+                }
             }
         }
     }
 
-    debug!("Returning current_type.clone()");
-    current_type_to_add_to.clone()
+    debug!("Returning current_type");
+    current_type_to_add_to
 }
 
 fn get_surrounding_expression(expr: &Option<Expr>) -> Option<String> {
