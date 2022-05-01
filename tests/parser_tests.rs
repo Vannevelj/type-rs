@@ -538,6 +538,33 @@ class MyComponent extends Component<Props> {
     }
 
     #[test]
+    fn add_types_generate_props_destructured_multi_nested() {
+        compare(
+            "
+class MyComponent extends Component { 
+    function test() {
+        const { somefield } = this.props;
+        const { abc } = this.props.deep;
+    }
+}",
+            "
+interface Props {
+    deep: {
+        abc: any,
+    },
+    somefield: any,
+}
+
+class MyComponent extends Component<Props> { 
+    function test() {
+        const { somefield } = this.props;
+        const { abc } = this.props.deep;
+    }
+}",
+        )
+    }
+
+    #[test]
     fn add_types_generate_props_destructured_nested() {
         compare(
             "
