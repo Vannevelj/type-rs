@@ -119,8 +119,8 @@ pub fn define_type_based_on_usage(
     Some(root_type)
 }
 
-fn create_type_definition_structure(parent_definition: TypeDefinition, current_dot_expr: DotExpr, mut path: Vec<String>) -> TypeDefinition {
-    let mut current_type_to_add_to = parent_definition.clone().get_field(&path, 0);
+fn create_type_definition_structure(mut parent_definition: TypeDefinition, current_dot_expr: DotExpr, mut path: Vec<String>) -> TypeDefinition {
+    let mut current_type_to_add_to = parent_definition.get_field(&path, 0);
 
     match &mut current_type_to_add_to {
         Some(ref mut current_type) => {
