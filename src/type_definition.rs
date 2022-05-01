@@ -52,16 +52,6 @@ impl TypeDefinition {
 
         buf.clone()
     }
-
-    fn get_field(&mut self, path: &Vec<String>, index: usize) -> Option<TypeDefinition> {
-        match &mut self.ts_type {
-            TypeDef::SimpleType(_) => None,
-            TypeDef::NestedType(children) => {
-                let found = children.into_iter().find(|child| child.name.eq(&path[index]));
-                found.unwrap().get_field(path, index + 1)
-            }
-        }
-    }
 }
 
 impl Ord for TypeDefinition {
@@ -110,7 +100,8 @@ pub fn define_type_based_on_usage(
                     _ => continue,
                 }
 
-                root_type = create_type_definition_structure(root_type.clone(), current_dot_expr, vec![])
+                root_type =
+                    create_type_definition_structure(root_type.clone(), current_dot_expr, vec![])
             }
             _ => (),
         }
@@ -119,46 +110,50 @@ pub fn define_type_based_on_usage(
     Some(root_type)
 }
 
-fn create_type_definition_structure(mut parent_definition: TypeDefinition, current_dot_expr: DotExpr, mut path: Vec<String>) -> TypeDefinition {
-    let mut current_type_to_add_to = parent_definition.get_field(&path, 0);
+fn create_type_definition_structure(
+    parent_definition: TypeDefinition,
+    current_dot_expr: DotExpr,
+    mut path: Vec<String>,
+) -> TypeDefinition {
+    let mut current_type_to_add_to = parent_definition;
 
-    match &mut current_type_to_add_to {
-        Some(ref mut current_type) => {
-            if let Some(name_prop) = current_dot_expr.prop() {
-                debug!(
-                    "Found nested name: {name_prop:?} ({})",
-                    name_prop.syntax().text()
-                );
-        
-                let new_type_def =
-                    TypeDefinition::new(name_prop.text(), current_dot_expr.object());
-                path.push(name_prop.text());
-        
-                match current_type.ts_type {
-                    TypeDef::SimpleType(_) => {
-                        let mut children = Vec::new();
-                        children.push(new_type_def);
-                        let new_type = TypeDef::NestedType(children);
-                        current_type.ts_type = new_type;
-                    }
-                    TypeDef::NestedType(ref mut nested_type) => {
-                        nested_type.push(new_type_def);
-                    }
-                }
-        
-                let parent = current_dot_expr.syntax().parent();
-                if let Some(parent) = parent {
-                    if parent.is::<DotExpr>() {
-                        let child_dot_expr = parent.to::<DotExpr>();
-                        return create_type_definition_structure(current_type.clone(), child_dot_expr, path)
-                    }
-                }
+    if let Some(name_prop) = current_dot_expr.prop() {
+        debug!(
+            "Found nested name: {name_prop:?} ({})",
+            name_prop.syntax().text()
+        );
+
+        let new_type_def = TypeDefinition::new(name_prop.text(), current_dot_expr.object());
+        path.push(name_prop.text());
+
+        match current_type_to_add_to.ts_type {
+            TypeDef::SimpleType(_) => {
+                let mut children = Vec::new();
+                children.push(new_type_def);
+                let new_type = TypeDef::NestedType(children);
+                current_type_to_add_to.ts_type = new_type;
             }
+            TypeDef::NestedType(ref mut nested_type) => {
+                nested_type.push(new_type_def);
+            }
+        }
 
-            current_type.clone()
-        },
-        None => parent_definition,
+        let parent = current_dot_expr.syntax().parent();
+        if let Some(parent) = parent {
+            if parent.is::<DotExpr>() {
+                let child_dot_expr = parent.to::<DotExpr>();
+                debug!("Returning create_type_definition_structure()");
+                return create_type_definition_structure(
+                    current_type_to_add_to.clone(),
+                    child_dot_expr,
+                    path,
+                );
+            }
+        }
     }
+
+    debug!("Returning current_type.clone()");
+    current_type_to_add_to.clone()
 }
 
 fn get_surrounding_expression(expr: &Option<Expr>) -> Option<String> {
