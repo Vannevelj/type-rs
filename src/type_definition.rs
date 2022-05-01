@@ -2,7 +2,7 @@ use log::{debug, trace};
 use rslint_parser::{
     ast::{
         ArgList, Declarator, DotExpr, Expr, ExprOrSpread, ExprStmt, LiteralKind, Name,
-        ObjectPattern, ParameterList, SinglePattern, ThisExpr,
+        ObjectPattern, ObjectPatternProp, ParameterList, SinglePattern, ThisExpr,
     },
     AstNode, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
@@ -205,13 +205,25 @@ fn include_destructured_properties(current_dot_expr: &DotExpr, new_type_def: &mu
             let object_pattern = object_pattern.to::<ObjectPattern>();
             debug!("Found object_pattern: {object_pattern:?}");
 
-            for descendant in object_pattern.syntax().descendants() {
-                if descendant.is::<SinglePattern>() {
-                    let pattern = descendant.to::<SinglePattern>();
-                    new_type_def.add_field(TypeDefinition::new(
-                        pattern.name().unwrap().text(),
-                        current_dot_expr.object(),
-                    ));
+            for element in object_pattern.elements() {
+                trace!("Object Pattern Element: {:?}", element.text());
+                match element {
+                    ObjectPatternProp::AssignPattern(_) => todo!(),
+                    ObjectPatternProp::KeyValuePattern(kv) => {
+                        if let Some(key) = kv.key() {
+                            new_type_def.add_field(TypeDefinition::new(
+                                key.text(),
+                                current_dot_expr.object(),
+                            ));
+                        }
+                    }
+                    ObjectPatternProp::RestPattern(_) => todo!(),
+                    ObjectPatternProp::SinglePattern(single) => {
+                        new_type_def.add_field(TypeDefinition::new(
+                            single.name().unwrap().text(),
+                            current_dot_expr.object(),
+                        ));
+                    }
                 }
             }
         }
