@@ -90,6 +90,7 @@ mod tests {
         let mut child2 = TypeDefinition::new("childprop2".into(), None);
 
         child1.add_field(&mut TypeDefinition::new("grandkiddie".into(), None));
+        child1.add_field(&mut TypeDefinition::new("grandkiddie".into(), None)); // same as before
         child1.add_field(&mut TypeDefinition::new("grandkiddie2".into(), None));
         child1.add_field(&mut TypeDefinition::new("grandkiddie3".into(), None));
         child2.add_field(&mut TypeDefinition::new("grandkiddie".into(), None));
