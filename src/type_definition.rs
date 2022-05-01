@@ -27,7 +27,7 @@ impl TypeDefinition {
     }
 
     fn render(&self, depth: usize) -> String {
-        let spacing = "  ".repeat(depth);
+        let spacing = "    ".repeat(depth);
         let mut buf = String::from("");
 
         match &self.ts_type {
@@ -36,7 +36,7 @@ impl TypeDefinition {
                 buf.push_str(format!("{spacing}{}: {},\n", self.name, resolved_type).as_str())
             }
             TypeDef::NestedType(children) => {
-                if depth == 1 {
+                if depth == 0 {
                     for child in children {
                         buf += child.render(depth + 1).as_str();
                     }
@@ -45,7 +45,7 @@ impl TypeDefinition {
                     for child in children {
                         buf += child.render(depth + 1).as_str();
                     }
-                    buf.push_str(format!("{spacing}}}").as_str());
+                    buf.push_str(format!("{spacing}}},").as_str());
                 }
             }
         }
@@ -263,12 +263,13 @@ pub fn get_type_from_expression(
 
 pub fn create_type_definition(def: &TypeDefinition, name: &str) -> String {
     debug!("Type definition: {def:?}");
-    let definition = def.render(1);
+    let definition = def.render(0);
 
     format!(
         "
 interface {name} {{
-{}}}
+{}
+}}
 ",
         definition
     )
