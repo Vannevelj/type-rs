@@ -6,12 +6,12 @@ use rslint_parser::{
     },
     AstNode, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
-use std::{cmp::Ordering, collections::BTreeSet};
+use std::cmp::Ordering;
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub enum TypeDef {
     SimpleType(Option<Expr>),
-    NestedType(BTreeSet<TypeDefinition>),
+    NestedType(Vec<TypeDefinition>),
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
@@ -39,13 +39,17 @@ impl TypeDefinition {
                 buf.push_str(format!("{spacing}{}: {},\n", self.name, resolved_type).as_str())
             }
             TypeDef::NestedType(children) => {
+                // Deterministic ordering of the children alphabetically
+                let mut sorted_children = children.clone();
+                sorted_children.sort_by(|a, b| a.name.cmp(&b.name));
+
                 if depth == 0 {
-                    for child in children {
+                    for child in sorted_children {
                         buf += child.render(depth + 1).as_str();
                     }
                 } else {
                     buf.push_str(format!("{spacing}{}: {{\n", self.name).as_str());
-                    for child in children {
+                    for child in sorted_children {
                         buf += child.render(depth + 1).as_str();
                     }
                     buf.push_str(format!("{spacing}}},\n").as_str());
@@ -56,20 +60,59 @@ impl TypeDefinition {
         buf.clone()
     }
 
-    pub fn add_field(&mut self, new_type_def: TypeDefinition) {
-        match self.ts_type {
+    pub fn add_field(&mut self, new_type_def: &mut TypeDefinition) {
+        match &mut self.ts_type {
             TypeDef::SimpleType(_) => {
-                let mut children = BTreeSet::new();
-                let res = children.insert(new_type_def);
-                debug!("Insert result (SimpleType): {res}");
+                self.add_child(vec![new_type_def.clone()]);
+            }
+            TypeDef::NestedType(_) => {
+                // Does the type already have the field we want to insert? If so, merge them together
+                self.merge(new_type_def);
+            }
+        }
+    }
+
+    fn add_child(&mut self, children: Vec<TypeDefinition>) {
+        match &mut self.ts_type {
+            TypeDef::SimpleType(_) => {
+                let children = Vec::new();
                 let new_type = TypeDef::NestedType(children);
                 self.ts_type = new_type;
             }
-            TypeDef::NestedType(ref mut nested_type) => {
-                //FIXME: does the type already have the new one we want to insert? If so, merge them together
-                let res = nested_type.insert(new_type_def);
-                debug!("Insert result (NestedType): {res}");
+            TypeDef::NestedType(ref mut nested_children) => {
+                for child in children {
+                    nested_children.push(child)
+                }
             }
+        }
+    }
+
+    fn get_children(&mut self) -> Option<&mut Vec<TypeDefinition>> {
+        match &mut self.ts_type {
+            TypeDef::SimpleType(_) => None,
+            TypeDef::NestedType(children) => Some(children),
+        }
+    }
+
+    fn merge(&mut self, other: &mut TypeDefinition) {
+        let mut existing_definition = self
+            .get_children()
+            .unwrap()
+            .iter_mut()
+            .find(|n| n.name.eq(&other.name));
+
+        match existing_definition {
+            Some(ref mut definition) => match other.ts_type {
+                TypeDef::SimpleType(_) => (),
+                TypeDef::NestedType(ref mut new_nested_definitions) => {
+                    definition.add_child(new_nested_definitions.clone());
+
+                    for new_nested in new_nested_definitions {
+                        definition.merge(new_nested);
+                    }
+                }
+            },
+            None => self.add_child(vec![other.clone()]),
         }
     }
 }
@@ -206,7 +249,7 @@ fn include_destructured_properties(current_dot_expr: &DotExpr, new_type_def: &mu
                     ObjectPatternProp::AssignPattern(_) => todo!(),
                     ObjectPatternProp::KeyValuePattern(kv) => {
                         if let Some(key) = kv.key() {
-                            new_type_def.add_field(TypeDefinition::new(
+                            new_type_def.add_field(&mut TypeDefinition::new(
                                 key.text(),
                                 current_dot_expr.object(),
                             ));
@@ -214,7 +257,7 @@ fn include_destructured_properties(current_dot_expr: &DotExpr, new_type_def: &mu
                     }
                     ObjectPatternProp::RestPattern(_) => todo!(),
                     ObjectPatternProp::SinglePattern(single) => {
-                        new_type_def.add_field(TypeDefinition::new(
+                        new_type_def.add_field(&mut TypeDefinition::new(
                             single.name().unwrap().text(),
                             current_dot_expr.object(),
                         ));
@@ -250,9 +293,9 @@ fn create_type_definition_structure(
                 debug!("Entering create_type_definition_structure()");
                 create_type_definition_structure(&mut new_type_def, parent, path);
 
-                current_type_to_add_to.add_field(new_type_def);
+                current_type_to_add_to.add_field(&mut new_type_def);
             }
-            None => current_type_to_add_to.add_field(new_type_def),
+            None => current_type_to_add_to.add_field(&mut new_type_def),
         }
     }
 }
