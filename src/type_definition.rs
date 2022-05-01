@@ -45,7 +45,7 @@ impl TypeDefinition {
                     for child in children {
                         buf += child.render(depth + 1).as_str();
                     }
-                    buf.push_str(format!("{spacing}}},").as_str());
+                    buf.push_str(format!("{spacing}}},\n").as_str());
                 }
             }
         }
