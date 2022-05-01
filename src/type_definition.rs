@@ -139,7 +139,7 @@ pub fn define_type_based_on_usage(
 
                         let new_type_def =
                             TypeDefinition::new(name_prop.text(), current_dot_expr.object());
-                        path.push(new_type_def.name);
+                        path.push(name_prop.text());
 
                         match current_type_to_add_to.ts_type {
                             TypeDef::SimpleType(_) => {
