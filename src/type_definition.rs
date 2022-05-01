@@ -82,7 +82,11 @@ impl TypeDefinition {
             }
             TypeDef::NestedType(ref mut nested_children) => {
                 for child in children {
-                    nested_children.push(child)
+                    // I used to use a BTreeSet to ensure this behaviour but I need a mutable iterator elsewhere,
+                    // which BTreeSet does not expose. So I fell back to a vector and preventing duplicates myself
+                    if !nested_children.contains(&child) {
+                        nested_children.push(child)
+                    }
                 }
             }
         }
