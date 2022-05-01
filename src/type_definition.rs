@@ -60,12 +60,15 @@ impl TypeDefinition {
         match self.ts_type {
             TypeDef::SimpleType(_) => {
                 let mut children = BTreeSet::new();
-                children.insert(new_type_def);
+                let res = children.insert(new_type_def);
+                debug!("Insert result (SimpleType): {res}");
                 let new_type = TypeDef::NestedType(children);
                 self.ts_type = new_type;
             }
             TypeDef::NestedType(ref mut nested_type) => {
-                nested_type.insert(new_type_def);
+                //FIXME: does the type already have the new one we want to insert? If so, merge them together
+                let res = nested_type.insert(new_type_def);
+                debug!("Insert result (NestedType): {res}");
             }
         }
     }
