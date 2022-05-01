@@ -1,6 +1,9 @@
 use log::{debug, trace};
 use rslint_parser::{
-    ast::{ArgList, DotExpr, Expr, ExprOrSpread, ExprStmt, LiteralKind, ParameterList, ThisExpr},
+    ast::{
+        ArgList, Declarator, DotExpr, Expr, ExprOrSpread, ExprStmt, LiteralKind, Name,
+        ObjectPattern, ParameterList, SinglePattern, ThisExpr,
+    },
     AstNode, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
 use std::{cmp::Ordering, collections::BTreeSet};
@@ -146,7 +149,7 @@ pub fn define_type_based_on_usage(
                     if corresponding_name == component_aspect {
                         debug!("this_expr! Found {:?}", this_expr);
 
-                        match get_parent_dot_expr(current_dot_expr) {
+                        match get_parent_dot_expr(&current_dot_expr) {
                             Some(parent) => {
                                 root_type = create_type_definition_structure(
                                     root_type.clone(),
@@ -154,7 +157,9 @@ pub fn define_type_based_on_usage(
                                     vec![],
                                 )
                             }
-                            None => (),
+                            None => {
+                                include_destructured_properties(&current_dot_expr, &mut root_type)
+                            }
                         }
                     } else {
                         continue;
@@ -172,7 +177,7 @@ pub fn define_type_based_on_usage(
     }
 }
 
-fn get_parent_dot_expr(expr: DotExpr) -> Option<DotExpr> {
+fn get_parent_dot_expr(expr: &DotExpr) -> Option<DotExpr> {
     let parent = expr.syntax().parent();
     if let Some(parent) = parent {
         if parent.is::<DotExpr>() {
@@ -181,6 +186,36 @@ fn get_parent_dot_expr(expr: DotExpr) -> Option<DotExpr> {
     }
 
     None
+}
+
+fn include_destructured_properties(current_dot_expr: &DotExpr, new_type_def: &mut TypeDefinition) {
+    if let Some(Some(declarator)) = current_dot_expr.syntax().parent().map(|anc| {
+        if anc.is::<Declarator>() {
+            Some(anc.to::<Declarator>())
+        } else {
+            None
+        }
+    }) {
+        debug!("Found declarator: {declarator:?}");
+
+        if let Some(object_pattern) = declarator
+            .syntax()
+            .child_with_kind(SyntaxKind::OBJECT_PATTERN)
+        {
+            let object_pattern = object_pattern.to::<ObjectPattern>();
+            debug!("Found object_pattern: {object_pattern:?}");
+
+            for descendant in object_pattern.syntax().descendants() {
+                if descendant.is::<SinglePattern>() {
+                    let pattern = descendant.to::<SinglePattern>();
+                    new_type_def.add_field(TypeDefinition::new(
+                        pattern.name().unwrap().text(),
+                        current_dot_expr.object(),
+                    ));
+                }
+            }
+        }
+    }
 }
 
 fn create_type_definition_structure(
@@ -197,10 +232,13 @@ fn create_type_definition_structure(
             name_prop.syntax().text()
         );
 
-        let new_type_def = TypeDefinition::new(name_prop.text(), current_dot_expr.object());
+        let mut new_type_def = TypeDefinition::new(name_prop.text(), current_dot_expr.object());
+
+        include_destructured_properties(&current_dot_expr, &mut new_type_def);
+
         path.push(name_prop.text());
 
-        match get_parent_dot_expr(current_dot_expr) {
+        match get_parent_dot_expr(&current_dot_expr) {
             Some(parent) => {
                 debug!("Entering create_type_definition_structure()");
                 let type_with_children =

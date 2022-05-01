@@ -513,6 +513,30 @@ class MyComponent extends Component<Props> {
     }
 
     #[test]
+    fn add_types_generate_props_destructured_alias() {
+        compare(
+            "
+class MyComponent extends Component { 
+    function test() {
+        const { somefield: alias } = this.props;
+        console.log(alias);
+    }
+}",
+            "
+interface Props {
+    somefield: any,
+}
+
+class MyComponent extends Component<Props> { 
+    function test() {
+        const { somefield: alias } = this.props;
+        console.log(alias);
+    }
+}",
+        )
+    }
+
+    #[test]
     fn add_types_generate_props_destructured_multiple() {
         compare(
             "
