@@ -108,7 +108,7 @@ pub fn add_types(contents: String) -> String {
                             (None, .., Some(state_usages)) => {
                                 let props_definition = props_fields.unwrap_or(TypeDefinition {
                                     name: "Props".to_string(),
-                                    ts_type: TypeDef::NestedType(Vec::new()),
+                                    ts_type: TypeDef::NestedType(BTreeSet::new()),
                                 });
                                 fixer.insert_before(
                                     start_of_file,

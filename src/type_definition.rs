@@ -3,12 +3,12 @@ use rslint_parser::{
     ast::{ArgList, DotExpr, Expr, ExprOrSpread, ExprStmt, LiteralKind, ParameterList},
     AstNode, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
-use std::cmp::Ordering;
+use std::{cmp::Ordering, collections::BTreeSet};
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub enum TypeDef {
     SimpleType(Option<Expr>),
-    NestedType(Vec<TypeDefinition>),
+    NestedType(BTreeSet<TypeDefinition>),
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
@@ -128,13 +128,13 @@ fn create_type_definition_structure(
 
         match current_type_to_add_to.ts_type {
             TypeDef::SimpleType(_) => {
-                let mut children = Vec::new();
-                children.push(new_type_def);
+                let mut children = BTreeSet::new();
+                children.insert(new_type_def);
                 let new_type = TypeDef::NestedType(children);
                 current_type_to_add_to.ts_type = new_type;
             }
             TypeDef::NestedType(ref mut nested_type) => {
-                nested_type.push(new_type_def);
+                nested_type.insert(new_type_def);
             }
         }
 
