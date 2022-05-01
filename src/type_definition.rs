@@ -1,6 +1,6 @@
 use log::{debug, trace};
 use rslint_parser::{
-    ast::{ArgList, DotExpr, Expr, ExprOrSpread, ExprStmt, LiteralKind, ParameterList},
+    ast::{ArgList, DotExpr, Expr, ExprOrSpread, ExprStmt, LiteralKind, ParameterList, ThisExpr},
     AstNode, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
 use std::{cmp::Ordering, collections::BTreeSet};
@@ -97,35 +97,90 @@ pub fn define_type_based_on_usage(
     };
 
     for descendant in root.descendants() {
-        match descendant.kind() {
-            SyntaxKind::DOT_EXPR => {
-                let current_dot_expr = {
-                    let mut inner = descendant.to::<DotExpr>();
-                    while let Some(child) = inner.syntax().child_with_kind(SyntaxKind::DOT_EXPR) {
-                        inner = child.to::<DotExpr>();
-                    }
-                    inner
-                };
-
-                match current_dot_expr.object() {
-                    Some(Expr::NameRef(name_ref)) if name_ref.text() == component_aspect => {
-                        debug!("name_ref! Found {:?}", name_ref);
-                    }
-                    _ => continue,
+        if let SyntaxKind::DOT_EXPR = descendant.kind() {
+            let current_dot_expr = {
+                let mut inner = descendant.to::<DotExpr>();
+                while let Some(child) = inner.syntax().child_with_kind(SyntaxKind::DOT_EXPR) {
+                    inner = child.to::<DotExpr>();
                 }
+                inner
+            };
 
-                root_type =
-                    create_type_definition_structure(root_type.clone(), current_dot_expr, vec![])
+            /* Take the inner-most DotExpr if we are accessing a.b.c.
+             Take the second to inner-most DotExpr if we are accessing this.props.a.b.c
+             This makes sure that we don't create an interface of the structure
+             ```
+                interface Props {
+                    props: {
+                        a
+                    }
+                }
+             ```
+            */
+            match current_dot_expr.object() {
+                /*  Used in
+                ```
+                    function(a) {
+                        console.log(a.b.c.d)
+                    }
+                ```
+                */
+                Some(Expr::NameRef(name_ref)) if name_ref.text() == component_aspect => {
+                    debug!("name_ref! Found {:?}", name_ref);
+
+                    root_type = create_type_definition_structure(
+                        root_type.clone(),
+                        current_dot_expr,
+                        vec![],
+                    )
+                }
+                /*  Used in
+                ```
+                    class Component {
+                        console.log(this.props.a)
+                    }
+                ```
+                */
+                Some(Expr::ThisExpr(this_expr)) => {
+                    let corresponding_name = this_expr.syntax().next_sibling().unwrap().text();
+                    if corresponding_name == component_aspect {
+                        debug!("this_expr! Found {:?}", this_expr);
+
+                        match get_parent_dot_expr(current_dot_expr) {
+                            Some(parent) => {
+                                root_type = create_type_definition_structure(
+                                    root_type.clone(),
+                                    parent,
+                                    vec![],
+                                )
+                            }
+                            None => (),
+                        }
+                    } else {
+                        continue;
+                    }
+                }
+                _ => continue,
             }
-            _ => (),
         }
     }
 
-    // Don't create a type definition if there are no usages
+    // Don't create an interface definition if there are no nested usages
     match root_type.ts_type {
         TypeDef::SimpleType(_) => None,
         TypeDef::NestedType(_) => Some(root_type),
     }
+}
+
+fn get_parent_dot_expr(expr: DotExpr) -> Option<DotExpr> {
+    let parent = expr.syntax().parent();
+    if let Some(parent) = parent {
+        if parent.is::<DotExpr>() {
+            return Some(parent.to::<DotExpr>());
+        }
+    }
+
+    None
 }
 
 fn create_type_definition_structure(
@@ -145,20 +200,15 @@ fn create_type_definition_structure(
         let new_type_def = TypeDefinition::new(name_prop.text(), current_dot_expr.object());
         path.push(name_prop.text());
 
-        let parent = current_dot_expr.syntax().parent();
-        if let Some(parent) = parent {
-            if parent.is::<DotExpr>() {
-                let child_dot_expr = parent.to::<DotExpr>();
+        match get_parent_dot_expr(current_dot_expr) {
+            Some(parent) => {
                 debug!("Entering create_type_definition_structure()");
                 let type_with_children =
-                    create_type_definition_structure(new_type_def, child_dot_expr, path);
+                    create_type_definition_structure(new_type_def, parent, path);
 
                 current_type_to_add_to.add_field(type_with_children);
-            } else {
-                current_type_to_add_to.add_field(new_type_def);
             }
-        } else {
-            current_type_to_add_to.add_field(new_type_def);
+            None => current_type_to_add_to.add_field(new_type_def),
         }
     }
 

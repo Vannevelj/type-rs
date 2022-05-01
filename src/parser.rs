@@ -211,7 +211,7 @@ fn print_ast(root: &SyntaxNode) {
             &node.kind(),
             &node.text(),
             &node.text_range().start(),
-            &node.text_range().end()            
+            &node.text_range().end()
         );
 
         for child in node.children() {
