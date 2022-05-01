@@ -27,7 +27,7 @@ impl TypeDefinition {
     }
 
     fn render(&self, depth: usize) -> String {
-        let spacing = "    ".repeat(depth);
+        let spacing = "  ".repeat(depth);
         let mut buf = String::from("");
 
         match &self.ts_type {
