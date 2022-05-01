@@ -77,7 +77,6 @@ impl TypeDefinition {
     fn add_child(&mut self, children: Vec<TypeDefinition>) {
         match self.ts_type {
             TypeDef::SimpleType(_) => {
-                let children = Vec::new();
                 let new_type = TypeDef::NestedType(children);
                 self.ts_type = new_type;
             }
