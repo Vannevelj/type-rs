@@ -21,7 +21,7 @@ pub struct TypeDefinition {
 }
 
 impl TypeDefinition {
-    fn new(name: String, expr: Option<Expr>) -> TypeDefinition {
+    pub fn new(name: String, expr: Option<Expr>) -> TypeDefinition {
         trace!("Creating typedef: {name}");
         TypeDefinition {
             name,
@@ -56,7 +56,7 @@ impl TypeDefinition {
         buf.clone()
     }
 
-    fn add_field(&mut self, new_type_def: TypeDefinition) {
+    pub fn add_field(&mut self, new_type_def: TypeDefinition) {
         match self.ts_type {
             TypeDef::SimpleType(_) => {
                 let mut children = BTreeSet::new();
