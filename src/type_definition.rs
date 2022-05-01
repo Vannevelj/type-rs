@@ -1,8 +1,8 @@
 use log::{debug, trace};
 use rslint_parser::{
     ast::{
-        ArgList, Declarator, DotExpr, Expr, ExprOrSpread, ExprStmt, LiteralKind, Name,
-        ObjectPattern, ObjectPatternProp, ParameterList, SinglePattern, ThisExpr,
+        ArgList, Declarator, DotExpr, Expr, ExprOrSpread, ExprStmt, LiteralKind, ObjectPattern,
+        ObjectPatternProp, ParameterList,
     },
     AstNode, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
