@@ -121,7 +121,11 @@ pub fn define_type_based_on_usage(
         }
     }
 
-    Some(root_type)
+    // Don't create a type definition if there are no usages
+    match root_type.ts_type {
+        TypeDef::SimpleType(_) => None,
+        TypeDef::NestedType(_) => Some(root_type),
+    }
 }
 
 fn create_type_definition_structure(
@@ -153,6 +157,8 @@ fn create_type_definition_structure(
             } else {
                 current_type_to_add_to.add_field(new_type_def);
             }
+        } else {
+            current_type_to_add_to.add_field(new_type_def);
         }
     }
 
