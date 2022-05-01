@@ -3,12 +3,12 @@ use rslint_parser::{
     ast::{ArgList, DotExpr, Expr, ExprOrSpread, ExprStmt, LiteralKind, ParameterList},
     AstNode, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
-use std::{cmp::Ordering, collections::BTreeSet};
+use std::cmp::Ordering;
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub enum TypeDef {
     SimpleType(Option<Expr>),
-    NestedType(BTreeSet<TypeDefinition>),
+    NestedType(Vec<TypeDefinition>),
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
@@ -53,12 +53,12 @@ impl TypeDefinition {
         buf.clone()
     }
 
-    fn get_field(&self, name: &String) -> Option<&TypeDefinition> {
-        match &self.ts_type {
+    fn get_field(&mut self, path: &Vec<String>, index: usize) -> Option<TypeDefinition> {
+        match &mut self.ts_type {
             TypeDef::SimpleType(_) => None,
             TypeDef::NestedType(children) => {
-                let found = children.into_iter().find(|child| child.name.eq(name));
-                found
+                let found = children.into_iter().find(|child| child.name.eq(&path[index]));
+                found.unwrap().get_field(path, index + 1)
             }
         }
     }
@@ -76,22 +76,6 @@ impl PartialOrd for TypeDefinition {
     }
 }
 
-fn get_field_from_path<'typedef>(
-    root_type: &'typedef TypeDefinition,
-    path: &Vec<String>,
-) -> &'typedef TypeDefinition {
-    let mut current_type = root_type;
-    for entry in path {
-        let child = current_type.get_field(entry);
-        match child {
-            None => break,
-            Some(child) => current_type = child,
-        }
-    }
-
-    current_type
-}
-
 /**
     Dot expr (DOT_EXPR) a.sa.nestedlongname [23-42]
         Dot expr (DOT_EXPR) a.sa [23-27]
@@ -103,7 +87,7 @@ pub fn define_type_based_on_usage(
     root: &SyntaxNode,
     component_aspect: &str,
 ) -> Option<TypeDefinition> {
-    let mut root_type = TypeDefinition {
+    let root_type = TypeDefinition {
         name: component_aspect.to_string(),
         ts_type: TypeDef::SimpleType(None),
     };
@@ -111,7 +95,7 @@ pub fn define_type_based_on_usage(
     for descendant in root.descendants() {
         match descendant.kind() {
             SyntaxKind::DOT_EXPR => {
-                let mut current_dot_expr = {
+                let current_dot_expr = {
                     let mut inner = descendant.to::<DotExpr>();
                     while let Some(child) = inner.syntax().child_with_kind(SyntaxKind::DOT_EXPR) {
                         inner = child.to::<DotExpr>();
@@ -123,53 +107,58 @@ pub fn define_type_based_on_usage(
                     Some(Expr::NameRef(name_ref)) if name_ref.text() == component_aspect => {
                         debug!("name_ref! Found {:?}", name_ref);
                     }
-                    _ => break,
+                    _ => continue,
                 }
 
-                let mut path: Vec<String> = vec![];
-
-                loop {
-                    let mut current_type_to_add_to = get_field_from_path(&root_type, &path);
-
-                    if let Some(name_prop) = current_dot_expr.prop() {
-                        debug!(
-                            "Found nested name: {name_prop:?} ({})",
-                            name_prop.syntax().text()
-                        );
-
-                        let new_type_def =
-                            TypeDefinition::new(name_prop.text(), current_dot_expr.object());
-                        path.push(name_prop.text());
-
-                        match current_type_to_add_to.ts_type {
-                            TypeDef::SimpleType(_) => {
-                                let mut children = BTreeSet::new();
-                                children.insert(new_type_def);
-                                let new_type = TypeDef::NestedType(children);
-                                current_type_to_add_to.ts_type = new_type;
-                            }
-                            TypeDef::NestedType(ref mut nested_type) => {
-                                nested_type.insert(new_type_def);
-                            }
-                        }
-
-                        let parent = current_dot_expr.syntax().parent();
-                        if let Some(parent) = parent {
-                            if parent.is::<DotExpr>() {
-                                current_dot_expr = parent.to::<DotExpr>();
-                                continue;
-                            }
-                        }
-                    }
-
-                    break;
-                }
+                create_type_definition_structure(root_type.clone(), current_dot_expr, vec![]);
             }
             _ => (),
         }
     }
 
     Some(root_type)
+}
+
+fn create_type_definition_structure(parent_definition: TypeDefinition, current_dot_expr: DotExpr, mut path: Vec<String>) -> TypeDefinition {
+    let mut current_type_to_add_to = parent_definition.clone().get_field(&path, 0);
+
+    match &mut current_type_to_add_to {
+        Some(ref mut current_type) => {
+            if let Some(name_prop) = current_dot_expr.prop() {
+                debug!(
+                    "Found nested name: {name_prop:?} ({})",
+                    name_prop.syntax().text()
+                );
+        
+                let new_type_def =
+                    TypeDefinition::new(name_prop.text(), current_dot_expr.object());
+                path.push(name_prop.text());
+        
+                match current_type.ts_type {
+                    TypeDef::SimpleType(_) => {
+                        let mut children = Vec::new();
+                        children.push(new_type_def);
+                        let new_type = TypeDef::NestedType(children);
+                        current_type.ts_type = new_type;
+                    }
+                    TypeDef::NestedType(ref mut nested_type) => {
+                        nested_type.push(new_type_def);
+                    }
+                }
+        
+                let parent = current_dot_expr.syntax().parent();
+                if let Some(parent) = parent {
+                    if parent.is::<DotExpr>() {
+                        let child_dot_expr = parent.to::<DotExpr>();
+                        return create_type_definition_structure(current_type.clone(), child_dot_expr, path)
+                    }
+                }
+            }
+
+            current_type.clone()
+        },
+        None => parent_definition.to_owned(),
+    }
 }
 
 fn get_surrounding_expression(expr: &Option<Expr>) -> Option<String> {
