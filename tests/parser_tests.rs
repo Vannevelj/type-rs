@@ -7,6 +7,7 @@ fn init() {
 
 mod tests {
     use type_rs::parser::add_types;
+    use pretty_assertions::assert_eq;
 
     fn compare(input: &str, expected_output: &str) {
         let output = add_types(String::from(input));
