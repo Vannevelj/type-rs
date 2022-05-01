@@ -131,11 +131,7 @@ pub fn define_type_based_on_usage(
                 Some(Expr::NameRef(name_ref)) if name_ref.text() == component_aspect => {
                     debug!("name_ref! Found {:?}", name_ref);
 
-                    root_type = create_type_definition_structure(
-                        root_type.clone(),
-                        current_dot_expr,
-                        vec![],
-                    )
+                    create_type_definition_structure(&mut root_type, current_dot_expr, vec![])
                 }
                 /*  Used in
                 ```
@@ -151,11 +147,7 @@ pub fn define_type_based_on_usage(
 
                         match get_parent_dot_expr(&current_dot_expr) {
                             Some(parent) => {
-                                root_type = create_type_definition_structure(
-                                    root_type.clone(),
-                                    parent,
-                                    vec![],
-                                )
+                                create_type_definition_structure(&mut root_type, parent, vec![])
                             }
                             None => {
                                 include_destructured_properties(&current_dot_expr, &mut root_type)
@@ -231,11 +223,11 @@ fn include_destructured_properties(current_dot_expr: &DotExpr, new_type_def: &mu
 }
 
 fn create_type_definition_structure(
-    parent_definition: TypeDefinition,
+    parent_definition: &mut TypeDefinition,
     current_dot_expr: DotExpr,
     mut path: Vec<String>,
-) -> TypeDefinition {
-    let mut current_type_to_add_to = parent_definition;
+) {
+    let current_type_to_add_to = parent_definition;
     debug!("path: {path:?}");
 
     if let Some(name_prop) = current_dot_expr.prop() {
@@ -253,17 +245,13 @@ fn create_type_definition_structure(
         match get_parent_dot_expr(&current_dot_expr) {
             Some(parent) => {
                 debug!("Entering create_type_definition_structure()");
-                let type_with_children =
-                    create_type_definition_structure(new_type_def, parent, path);
+                create_type_definition_structure(&mut new_type_def, parent, path);
 
-                current_type_to_add_to.add_field(type_with_children);
+                current_type_to_add_to.add_field(new_type_def);
             }
             None => current_type_to_add_to.add_field(new_type_def),
         }
     }
-
-    debug!("Returning current_type");
-    current_type_to_add_to
 }
 
 fn get_surrounding_expression(expr: &Option<Expr>) -> Option<String> {
