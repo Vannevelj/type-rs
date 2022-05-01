@@ -28,12 +28,12 @@ mod tests {
     #[test]
     fn type_definition_add_field_nested_child() {
         let mut root = TypeDefinition::new("mytype".into(), None);
-        let mut children = Vec::new();
-        children.push(TypeDefinition::new("grandchildprop".into(), None));
-        children.push(TypeDefinition::new("grandchildprop2".into(), None));
         root.add_field(&mut TypeDefinition {
             name: "childprop".into(),
-            ts_type: TypeDef::NestedType(children),
+            ts_type: TypeDef::NestedType(vec![
+                TypeDefinition::new("grandchildprop".into(), None),
+                TypeDefinition::new("grandchildprop2".into(), None),
+            ]),
         });
 
         let children = get_children(&root);
@@ -60,11 +60,24 @@ mod tests {
         let mut root = TypeDefinition::new("mytype".into(), None);
         root.add_field(&mut TypeDefinition::new("childprop".into(), None));
 
-        let mut kids = Vec::new();
-        kids.push(TypeDefinition::new("grandkiddie".into(), None));
         root.add_field(&mut TypeDefinition {
             name: "childprop".into(),
-            ts_type: TypeDef::NestedType(kids),
+            ts_type: TypeDef::NestedType(vec![TypeDefinition::new("grandkiddie".into(), None)]),
+        });
+
+        let children = get_children(&root);
+        assert_eq!(1, children.len());
+        assert_eq!(1, get_children(&children[0]).len());
+    }
+
+    #[test]
+    fn type_definition_add_field_same_child_with_grandkids() {
+        let mut root = TypeDefinition::new("mytype".into(), None);
+        root.add_field(&mut TypeDefinition::new("childprop".into(), None));
+
+        root.add_field(&mut TypeDefinition {
+            name: "childprop".into(),
+            ts_type: TypeDef::NestedType(vec![TypeDefinition::new("grandkiddie".into(), None)]),
         });
 
         let children = get_children(&root);
