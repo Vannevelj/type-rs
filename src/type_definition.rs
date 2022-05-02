@@ -293,15 +293,12 @@ fn create_type_definition_structure(
 
         path.push(name_prop.text());
 
-        match get_parent_dot_expr(&current_dot_expr) {
-            Some(parent) => {
-                debug!("Entering create_type_definition_structure()");
-                create_type_definition_structure(&mut new_type_def, parent, path);
-
-                current_type_to_add_to.add_field(&mut new_type_def);
-            }
-            None => current_type_to_add_to.add_field(&mut new_type_def),
+        if let Some(parent) = get_parent_dot_expr(&current_dot_expr) {
+            debug!("Entering create_type_definition_structure()");
+            create_type_definition_structure(&mut new_type_def, parent, path);
         }
+
+        current_type_to_add_to.add_field(&mut new_type_def)
     }
 }
 
