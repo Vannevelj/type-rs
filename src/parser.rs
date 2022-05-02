@@ -96,12 +96,13 @@ pub fn add_types(contents: String) -> String {
             }
             SyntaxKind::CLASS_DECL => {
                 let class = descendant.to::<ClassDecl>();
-                let props_fields = define_type_based_on_usage(&ast, "props");
-                let state_fields = define_type_based_on_usage(&ast, "state");
-                debug!("Found props: {props_fields:?}");
 
                 match class.parent() {
                     Some(parent) if is_react_component_class(&parent) => {
+                        let props_fields = define_type_based_on_usage(&ast, "props");
+                        let state_fields = define_type_based_on_usage(&ast, "state");
+                        debug!("Found props: {props_fields:?}");
+
                         match (class.parent_type_args(), &props_fields, &state_fields) {
                             (None, .., Some(state_usages)) => {
                                 let props_definition = props_fields.unwrap_or(TypeDefinition {
