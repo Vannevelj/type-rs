@@ -886,21 +886,21 @@ function first(action) { console.log(action.data); }
 function second(action) { console.log(action.data); }
 function third(action) { console.log(action.data); }",
             "
-interface Action1 {
-    data: any;
+interface Action {
+    data: any,
 }
 
 interface Action2 {
-    data: any;
+    data: any,
 }
 
 interface Action3 {
-    data: any;
+    data: any,
 }
 
-function first(action) { console.log(action.data); }
-function second(action) { console.log(action.data); }
-function third(action) { console.log(action.data); }",
+function first(action: Action) { console.log(action.data); }
+function second(action: Action2) { console.log(action.data); }
+function third(action: Action3) { console.log(action.data); }",
         );
     }
 }

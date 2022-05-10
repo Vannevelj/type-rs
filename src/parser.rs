@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use inflector::Inflector;
 use log::{debug, trace};
 use rslint_parser::{
@@ -23,6 +25,8 @@ pub fn add_types(contents: String) -> String {
     let mut fixer = TextEditor::load(contents);
     print_ast(&ast);
     let start_of_file = ast.text_range();
+
+    let mut created_types = HashSet::new();
 
     for descendant in ast.descendants() {
         match descendant.kind() {
@@ -59,11 +63,17 @@ pub fn add_types(contents: String) -> String {
                             update_pattern(&param, &mut fixer, None, None);
                         }
                         Some(ref usages) => {
+                            let name = get_collision_free_typename(
+                                new_parameter_type.clone(),
+                                &mut created_types,
+                            );
+
                             fixer.insert_before(
                                 start_of_file,
-                                create_type_definition(usages, new_parameter_type.as_str()),
+                                create_type_definition(usages, name.as_str()),
                             );
-                            update_pattern(&param, &mut fixer, None, Some(new_parameter_type));
+
+                            update_pattern(&param, &mut fixer, None, Some(name));
                         }
                     }
                 }
@@ -206,6 +216,25 @@ fn is_react_component_class(expr: &Expr) -> bool {
             class_names.contains(&dot_expr.prop().unwrap().text().as_str())
         }
         _ => false,
+    }
+}
+
+/// If we already created a type with this name in the file, append a unique suffix
+fn get_collision_free_typename(name: String, created_types: &mut HashSet<String>) -> String {
+    if created_types.insert(name.clone()) {
+        return name;
+    }
+
+    let mut index = 2;
+    loop {
+        let temp_name = format!("{name}{index}");
+
+        if !created_types.insert(temp_name.clone()) {
+            index = index + 1;
+            continue;
+        } else {
+            return temp_name;
+        }
     }
 }
 
