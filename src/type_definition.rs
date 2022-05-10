@@ -1,8 +1,8 @@
 use log::{debug, trace};
 use rslint_parser::{
     ast::{
-        ArgList, Declarator, DotExpr, Expr, ExprOrSpread, ExprStmt, LiteralKind, ObjectPattern,
-        ObjectPatternProp, ParameterList,
+        ArgList, Declarator, DotExpr, Expr, ExprOrSpread, ExprStmt, LiteralKind, NameRef,
+        ObjectPattern, ObjectPatternProp, ParameterList,
     },
     AstNode, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
@@ -151,67 +151,87 @@ pub fn define_type_based_on_usage(
     };
 
     for descendant in root.descendants() {
-        if let SyntaxKind::DOT_EXPR = descendant.kind() {
-            let current_dot_expr = {
-                let mut inner = descendant.to::<DotExpr>();
-                while let Some(child) = inner.syntax().child_with_kind(SyntaxKind::DOT_EXPR) {
-                    inner = child.to::<DotExpr>();
-                }
-                inner
-            };
-
-            /* Take the inner-most DotExpr if we are accessing a.b.c.
-             Take the second to inner-most DotExpr if we are accessing this.props.a.b.c
-             This makes sure that we don't create an interface of the structure
-             ```
-                interface Props {
-                    props: {
-                        a
+        match descendant.kind() {
+            SyntaxKind::DOT_EXPR => {
+                let current_dot_expr = {
+                    let mut inner = descendant.to::<DotExpr>();
+                    while let Some(child) = inner.syntax().child_with_kind(SyntaxKind::DOT_EXPR) {
+                        inner = child.to::<DotExpr>();
                     }
-                }
-             ```
-            */
-            match current_dot_expr.object() {
-                /*  Used in
-                ```
-                    function(a) {
-                        console.log(a.b.c.d)
-                    }
-                ```
-                */
-                Some(Expr::NameRef(name_ref)) if name_ref.text() == component_aspect => {
-                    debug!("name_ref! Found {:?}", name_ref);
+                    inner
+                };
 
-                    create_type_definition_structure(&mut root_type, current_dot_expr, vec![])
-                }
-                /*  Used in
-                ```
-                    class Component {
-                        console.log(this.props.a)
-                    }
-                ```
-                */
-                Some(Expr::ThisExpr(this_expr)) => {
-                    let corresponding_name = this_expr.syntax().next_sibling().unwrap().text();
-                    if corresponding_name == component_aspect {
-                        debug!("this_expr! Found {:?}", this_expr);
-
-                        match get_parent_dot_expr(&current_dot_expr) {
-                            Some(parent) => {
-                                create_type_definition_structure(&mut root_type, parent, vec![])
-                            }
-                            None => {
-                                include_destructured_properties(&current_dot_expr, &mut root_type)
-                            }
+                /* Take the inner-most DotExpr if we are accessing a.b.c.
+                 Take the second to inner-most DotExpr if we are accessing this.props.a.b.c
+                 This makes sure that we don't create an interface of the structure
+                 ```
+                    interface Props {
+                        props: {
+                            a
                         }
-                    } else {
-                        continue;
                     }
+                 ```
+                */
+                match current_dot_expr.object() {
+                    /*  Used in
+                    ```
+                        function(a) {
+                            console.log(a.b.c.d)
+                        }
+                    ```
+                    */
+                    Some(Expr::NameRef(name_ref)) if name_ref.text() == component_aspect => {
+                        debug!("name_ref! Found {:?}", name_ref);
+
+                        create_type_definition_structure(
+                            &mut root_type,
+                            &current_dot_expr.into(),
+                            vec![],
+                        )
+                    }
+                    /*  Used in
+                    ```
+                        class Component {
+                            console.log(this.props.a)
+                        }
+                    ```
+                    */
+                    Some(Expr::ThisExpr(this_expr)) => {
+                        let corresponding_name = this_expr.syntax().next_sibling().unwrap().text();
+                        if corresponding_name == component_aspect {
+                            debug!("this_expr! Found {:?}", this_expr);
+
+                            match get_parent_dot_expr(&current_dot_expr) {
+                                Some(parent) => create_type_definition_structure(
+                                    &mut root_type,
+                                    &parent.into(),
+                                    vec![],
+                                ),
+                                None => include_destructured_properties(
+                                    &current_dot_expr.into(),
+                                    &mut root_type,
+                                ),
+                            }
+                        } else {
+                            continue;
+                        }
+                    }
+                    _ => continue,
                 }
-                _ => continue,
             }
+            SyntaxKind::NAME_REF => {
+                let name_ref = descendant.to::<NameRef>();
+                if name_ref.text() == component_aspect {
+                    trace!("Found top level name_ref");
+
+                    include_destructured_properties(&name_ref.into(), &mut root_type);
+                }
+            }
+            _ => (),
         }
     }
+
+    debug!("Resulting root type: {:?}", root_type);
 
     // Don't create an interface definition if there are no nested usages
     match root_type.ts_type {
@@ -231,8 +251,8 @@ fn get_parent_dot_expr(expr: &DotExpr) -> Option<DotExpr> {
     None
 }
 
-fn include_destructured_properties(current_dot_expr: &DotExpr, new_type_def: &mut TypeDefinition) {
-    if let Some(Some(declarator)) = current_dot_expr.syntax().parent().map(|anc| {
+fn include_destructured_properties(expr: &Expr, new_type_def: &mut TypeDefinition) {
+    if let Some(Some(declarator)) = expr.syntax().parent().map(|anc| {
         if anc.is::<Declarator>() {
             Some(anc.to::<Declarator>())
         } else {
@@ -254,17 +274,14 @@ fn include_destructured_properties(current_dot_expr: &DotExpr, new_type_def: &mu
                     ObjectPatternProp::AssignPattern(_) => todo!(),
                     ObjectPatternProp::KeyValuePattern(kv) => {
                         if let Some(key) = kv.key() {
-                            new_type_def.add_field(&mut TypeDefinition::new(
-                                key.text(),
-                                current_dot_expr.object(),
-                            ));
+                            new_type_def.add_field(&mut TypeDefinition::new(key.text(), None));
                         }
                     }
                     ObjectPatternProp::RestPattern(_) => todo!(),
                     ObjectPatternProp::SinglePattern(single) => {
                         new_type_def.add_field(&mut TypeDefinition::new(
                             single.name().unwrap().text(),
-                            current_dot_expr.object(),
+                            None,
                         ));
                     }
                 }
@@ -275,7 +292,7 @@ fn include_destructured_properties(current_dot_expr: &DotExpr, new_type_def: &mu
 
 fn create_type_definition_structure(
     parent_definition: &mut TypeDefinition,
-    current_dot_expr: DotExpr,
+    current_dot_expr: &DotExpr,
     mut path: Vec<String>,
 ) {
     let current_type_to_add_to = parent_definition;
@@ -289,13 +306,13 @@ fn create_type_definition_structure(
 
         let mut new_type_def = TypeDefinition::new(name_prop.text(), current_dot_expr.object());
 
-        include_destructured_properties(&current_dot_expr, &mut new_type_def);
+        include_destructured_properties(&current_dot_expr.clone().into(), &mut new_type_def);
 
         path.push(name_prop.text());
 
         if let Some(parent) = get_parent_dot_expr(&current_dot_expr) {
             debug!("Entering create_type_definition_structure()");
-            create_type_definition_structure(&mut new_type_def, parent, path);
+            create_type_definition_structure(&mut new_type_def, &parent, path);
         }
 
         current_type_to_add_to.add_field(&mut new_type_def)

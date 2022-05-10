@@ -864,12 +864,12 @@ function doThing(x: any) {
     fn add_types_const_arrow_function_with_usage() {
         compare(
             "
-const mapStateToProps = (state: any) => {
+const mapStateToProps = (state) => {
     const { player } = state;   
 }",
             "
 interface State {
-    player: any;
+    player: any,
 }
 
 const mapStateToProps = (state: State) => {
