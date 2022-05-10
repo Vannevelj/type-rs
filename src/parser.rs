@@ -39,6 +39,15 @@ pub fn add_types(contents: String) -> String {
                     })
                     .unwrap();
                 for param in param_list.parameters() {
+                    /*  Taking the text here is very crude and means that any parameter that has a default value
+                       will end up not finding any usages. i.e. this function
+                       ```
+                       function f(a = 32)
+                       ```
+                       will result in a name of "a = 32", which doesn't correspond to any identifier.
+                       More reliable would be to match this to a SinglePattern instead except
+                       we don't actually care about these scenarios so we're okay with it for now.
+                    */
                     let parameter_name = param.text();
                     let new_parameter_type = parameter_name.to_pascal_case();
                     let param_usages =
