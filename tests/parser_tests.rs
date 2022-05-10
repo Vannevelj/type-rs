@@ -184,54 +184,6 @@ function foo(
     }
 
     #[test]
-    fn add_types_destructured_parameter_with_usage() {
-        compare(
-            "
-function getRole({ permissions, user }) { 
-    console.log(permissions);
-    console.log(user);
-}",
-            "
-interface GetRoleArgs {
-    permissions: any,
-    user: any,
-} 
-            
-function getRole({ permissions, user }: GetRoleArgs) { 
-    console.log(permissions);
-    console.log(user);
-}",
-        );
-    }
-
-    #[test]
-    fn add_types_destructured_parameter_with_usage_nested() {
-        compare(
-            "
-function getRole({ permissions, user }) { 
-    console.log(permissions.doThing());
-    console.log(user.name.first);
-}",
-            "
-interface GetRoleArgs {
-    permissions: {
-        doThing: Function,
-    },
-    user: {
-        name: {
-            first: any,
-        },
-    },
-} 
-            
-function getRole({ permissions, user }: GetRoleArgs) { 
-    console.log(permissions);
-    console.log(user);
-}",
-        );
-    }
-
-    #[test]
     fn add_types_for_in() {
         compare(
             "

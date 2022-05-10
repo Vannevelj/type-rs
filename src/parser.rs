@@ -3,7 +3,7 @@ use log::{debug, trace};
 use rslint_parser::{
     ast::{
         ArrowExpr, CatchClause, ClassDecl, Constructor, Declarator, Expr, FnDecl, FnExpr,
-        ForStmtInit, Method, Name, ObjectPatternProp, ParameterList, Pattern,
+        ForStmtInit, Method, Name, ParameterList, Pattern,
     },
     parse_with_syntax, AstNode, Syntax, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
@@ -15,34 +15,6 @@ use crate::{
         TypeDefinition,
     },
 };
-
-// fn get_names_from_pattern(pattern: &Pattern) -> Vec<String> {
-//     match pattern {
-//         Pattern::SinglePattern(pat) => vec![pat.name().unwrap().text()],
-//         Pattern::RestPattern(_) => todo!(),
-//         Pattern::AssignPattern(pat) => get_names_from_pattern(&pat.key().unwrap()),
-//         Pattern::ObjectPattern(pat) => {
-//             let mut names: Vec<String> = Vec::new();
-//             for object in pat.elements() {
-//                 match object {
-//                     ObjectPatternProp::AssignPattern(assign) => {
-//                         names.append(&mut get_names_from_pattern(&assign.key().unwrap()))
-//                     }
-//                     ObjectPatternProp::KeyValuePattern(kvp) => {
-//                         names.push(kvp.key().unwrap().text())
-//                     }
-//                     ObjectPatternProp::RestPattern(_) => todo!(),
-//                     ObjectPatternProp::SinglePattern(single) => {
-//                         names.push(single.name().unwrap().text())
-//                     }
-//                 }
-//             }
-//             names
-//         }
-//         Pattern::ArrayPattern(_) => todo!(),
-//         Pattern::ExprPattern(_) => todo!(),
-//     }
-// }
 
 pub fn add_types(contents: String) -> String {
     let syntax = Syntax::default().typescript();
@@ -66,53 +38,24 @@ pub fn add_types(contents: String) -> String {
                             || anc.is::<FnExpr>()
                     })
                     .unwrap();
-
                 for param in param_list.parameters() {
-                    let type_definition = match &param {
-                        // if a parameter is destructured, always create an interface for it
-                        // Combine destructured fields into single interface
-                        Pattern::ObjectPattern(pat) => {
-                            let mut new_parent_type = None;
+                    let parameter_name = param.text();
+                    let new_parameter_type = parameter_name.to_pascal_case();
+                    let param_usages =
+                        define_type_based_on_usage(&outer_scope, parameter_name.as_str());
+                    debug!("Found param_usages: {param_usages:?} ({parameter_name})");
 
-                            for object in pat.elements() {
-                                match object {
-                                    ObjectPatternProp::KeyValuePattern(kvp) => {
-                                        new_parent_type = define_type_based_on_usage(
-                                            &outer_scope,
-                                            kvp.key().unwrap().text().as_str(),
-                                        );
-                                    }
-                                    ObjectPatternProp::SinglePattern(single) => {
-                                        new_parent_type = define_type_based_on_usage(
-                                            &outer_scope,
-                                            single.name().unwrap().text().as_str(),
-                                        );
-                                    }
-                                    _ => (),
-                                }
-                            }
-                            new_parent_type
+                    match param_usages {
+                        None => {
+                            update_pattern(&param, &mut fixer, None, None);
                         }
-
-                        _ => define_type_based_on_usage(&outer_scope, param.text().as_str()),
-                    };
-
-                    match type_definition {
-                        Some(typedef) => {
-                            debug!("Found param_usages: {typedef:?} ({})", typedef.name);
-
+                        Some(ref usages) => {
                             fixer.insert_before(
                                 start_of_file,
-                                create_type_definition(&typedef, typedef.name.as_str()),
+                                create_type_definition(usages, new_parameter_type.as_str()),
                             );
-                            update_pattern(
-                                &param,
-                                &mut fixer,
-                                None,
-                                Some(typedef.name.to_pascal_case()),
-                            );
+                            update_pattern(&param, &mut fixer, None, Some(new_parameter_type));
                         }
-                        None => update_pattern(&param, &mut fixer, None, None),
                     }
                 }
             }
