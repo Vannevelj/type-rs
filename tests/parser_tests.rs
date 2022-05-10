@@ -859,4 +859,48 @@ function doThing(x: any) {
 }",
         );
     }
+
+    #[test]
+    fn add_types_const_arrow_function_with_usage() {
+        compare(
+            "
+const mapStateToProps = (state: any) => {
+    const { player } = state;   
+}",
+            "
+interface State {
+    player: any;
+}
+
+const mapStateToProps = (state: State) => {
+    const { player } = state;   
+}",
+        );
+    }
+
+    #[test]
+    fn add_types_param_name_collision() {
+        compare(
+            "
+function first(action) { console.log(action.data); }
+function second(action) { console.log(action.data); }
+function third(action) { console.log(action.data); }",
+            "
+interface Action1 {
+    data: any;
+}
+
+interface Action2 {
+    data: any;
+}
+
+interface Action3 {
+    data: any;
+}
+
+function first(action) { console.log(action.data); }
+function second(action) { console.log(action.data); }
+function third(action) { console.log(action.data); }",
+        );
+    }
 }
