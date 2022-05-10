@@ -1,8 +1,8 @@
 use log::{debug, trace};
 use rslint_parser::{
     ast::{
-        ArgList, Declarator, DotExpr, Expr, ExprOrSpread, ExprStmt, LiteralKind, NameRef,
-        ObjectPattern, ObjectPatternProp, ParameterList,
+        ArgList, AssignExpr, CallExpr, Declarator, DotExpr, Expr, ExprOrSpread, ExprStmt,
+        LiteralKind, NameRef, ObjectPattern, ObjectPatternProp, ParameterList,
     },
     AstNode, SyntaxKind, SyntaxNode, SyntaxNodeExt,
 };
@@ -22,7 +22,7 @@ pub struct TypeDefinition {
 
 impl TypeDefinition {
     pub fn new(name: String, expr: Option<Expr>) -> TypeDefinition {
-        trace!("Creating typedef: {name}");
+        trace!("Creating typedef: {name} ({expr:?})");
         TypeDefinition {
             name,
             ts_type: TypeDef::SimpleType(expr),
@@ -297,6 +297,7 @@ fn create_type_definition_structure(
 ) {
     let current_type_to_add_to = parent_definition;
     debug!("path: {path:?}");
+    debug!("current_dot_expr: {current_dot_expr:?}");
 
     if let Some(name_prop) = current_dot_expr.prop() {
         debug!(
@@ -315,32 +316,54 @@ fn create_type_definition_structure(
             create_type_definition_structure(&mut new_type_def, &parent, path);
         }
 
+        /*
+            If we reach the end of the dot_expr, look at the surrounding expression.
+            By storing the Assign or Call expression, we can more accurately determine what type it is
+        */
+        if let Some(parent) = current_dot_expr.syntax().parent() {
+            if parent.is::<CallExpr>() {
+                debug!("found callexpr, overriding");
+                let parent_expr = parent.to::<CallExpr>();
+                new_type_def = TypeDefinition::new(new_type_def.name, Some(parent_expr.into()))
+            }
+
+            if parent.is::<AssignExpr>() {
+                debug!("found callexpr, overriding");
+                let parent_expr = parent.to::<AssignExpr>();
+                new_type_def = TypeDefinition::new(new_type_def.name, Some(parent_expr.into()))
+            }
+        }
+
         current_type_to_add_to.add_field(&mut new_type_def)
     }
 }
 
 fn get_surrounding_expression(expr: &Option<Expr>) -> Option<String> {
-    if let Some(expr) = expr {
-        let expr_statement = expr
-            .syntax()
-            .ancestors()
-            .take_while(|anc| !anc.is::<ArgList>() && !anc.is::<ParameterList>())
-            .find(|anc| anc.is::<ExprStmt>())
-            .map(|anc| anc.to::<ExprStmt>());
+    debug!("Fetching expression: {expr:?}");
+    match expr {
+        Some(Expr::AssignExpr(assign)) => {
+            let expr_statement = assign
+                .syntax()
+                .ancestors()
+                .take_while(|anc| !anc.is::<ArgList>() && !anc.is::<ParameterList>())
+                .find(|anc| anc.is::<ExprStmt>())
+                .map(|anc| anc.to::<ExprStmt>());
 
-        if let Some(expr) = expr_statement {
-            let expr = expr.expr();
-            debug!("surrounding expression: {:?}", expr);
+            if let Some(expr) = expr_statement {
+                let expr = expr.expr();
+                debug!("surrounding expression: {:?}", expr);
 
-            return get_type_from_expression(expr, &None);
+                return get_type_from_expression(&expr, &None);
+            }
+
+            None
         }
+        _ => get_type_from_expression(expr, &None),
     }
-
-    None
 }
 
 pub fn get_type_from_expression(
-    expr: Option<Expr>,
+    expr: &Option<Expr>,
     created_type: &Option<String>,
 ) -> Option<String> {
     trace!("expr: {expr:?}");
@@ -354,7 +377,7 @@ pub fn get_type_from_expression(
             let mut found_type = None;
             for element in array.elements() {
                 if let ExprOrSpread::Expr(expr) = element {
-                    let expression_type = get_type_from_expression(Some(expr), created_type);
+                    let expression_type = get_type_from_expression(&Some(expr), created_type);
                     match expression_type {
                         Some(element_type) => {
                             match found_type {
@@ -383,13 +406,14 @@ pub fn get_type_from_expression(
         Some(Expr::ObjectExpr(_)) | None => Some(String::from("any")),
         Some(Expr::NameRef(nr)) if nr.text() == "undefined" => Some(String::from("any")), 
         Some(Expr::AssignExpr(assign_expr)) => {
-            get_type_from_expression(assign_expr.rhs(), created_type)
+            get_type_from_expression(&assign_expr.rhs(), created_type)
         }
         // FIXME: use more specific function signatures
         Some(Expr::CallExpr(call_expr)) => {
             if call_expr.callee()?.text() == "BigInt" {
                 return Some(String::from("BigInt"));
             }
+
             Some(String::from("Function"))
         },
         _ => None

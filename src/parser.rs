@@ -174,7 +174,7 @@ fn update_pattern(
             trace!("single: {single:?}");
             if let Some(span) = single.name().map(|name| name.range()) {
                 if let Some(type_annotation) =
-                    get_type_from_expression(expr.or(None), &created_type)
+                    get_type_from_expression(&expr.or(None), &created_type)
                 {
                     debug!("FIXER insert: {span:?}");
                     fixer.insert_after(span, format!(": {}", type_annotation));
@@ -185,7 +185,7 @@ fn update_pattern(
         Pattern::AssignPattern(assign) if assign.ty().is_none() => {
             // FIXME: AssignPattern.key() returns None so we work around it by querying the children instead. Should be Pattern::SinglePattern
             if let Some(type_annotation) =
-                get_type_from_expression(expr.or_else(|| assign.value()), &created_type)
+                get_type_from_expression(&expr.or_else(|| assign.value()), &created_type)
             {
                 if let Some(name) = assign.syntax().child_with_ast::<Name>() {
                     debug!("FIXER insert: {:?}", name.range());
@@ -194,7 +194,7 @@ fn update_pattern(
             }
         }
         Pattern::ObjectPattern(obj) if obj.ty().is_none() => {
-            if let Some(type_annotation) = get_type_from_expression(expr.or(None), &created_type) {
+            if let Some(type_annotation) = get_type_from_expression(&expr.or(None), &created_type) {
                 debug!("FIXER insert: {:?}", obj.range());
                 fixer.insert_after(obj.range(), format!(": {}", type_annotation));
             }

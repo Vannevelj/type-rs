@@ -903,4 +903,50 @@ function second(action: Action2) { console.log(action.data); }
 function third(action: Action3) { console.log(action.data); }",
         );
     }
+
+    #[test]
+    fn add_types_assigns_value_constant_number() {
+        compare(
+            "
+function test(a) {
+    a.nest.more.field = 5;    
+}",
+            "
+interface A {
+    nest: {
+        more: {
+            field: number,
+        },
+    },
+}
+
+function test(a: A) {
+    a.nest.more.field = 5;    
+}",
+        );
+    }
+
+    #[test]
+    fn add_types_invokes_tostring() {
+        compare(
+            "
+function test(a) {
+    console.log(a.nest.more.field.toString());
+}",
+            "
+interface A {
+    nest: {
+        more: {
+            field: {
+                toString: Function,
+            },
+        },
+    },
+}
+
+function test(a: A) {
+    console.log(a.nest.more.field.toString());
+}",
+        );
+    }
 }
