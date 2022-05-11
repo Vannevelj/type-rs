@@ -949,4 +949,26 @@ function test(a: A) {
 }",
         );
     }
+
+    #[test]
+    fn add_types_assigns_object() {
+        compare(
+            "
+function test(a) {
+    a.field = { test: 5 };
+}",
+            "
+interface A {
+    field: {
+        test: {
+            5: number,
+        },
+    },
+}
+
+function test(a: A) {
+    a.field = { test: 5 };
+}",
+        );
+    }
 }
