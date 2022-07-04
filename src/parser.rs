@@ -230,7 +230,7 @@ fn get_collision_free_typename(name: String, created_types: &mut HashSet<String>
         let temp_name = format!("{name}{index}");
 
         if !created_types.insert(temp_name.clone()) {
-            index = index + 1;
+            index += 1;
             continue;
         } else {
             return temp_name;

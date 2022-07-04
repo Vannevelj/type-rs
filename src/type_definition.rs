@@ -35,7 +35,7 @@ impl TypeDefinition {
 
         match &self.ts_type {
             TypeDef::SimpleType(expr) => {
-                let resolved_type = get_surrounding_expression(expr).unwrap_or(String::from("any"));
+                let resolved_type = get_surrounding_expression(expr).unwrap_or_else(|| String::from("any"));
                 buf.push_str(format!("{spacing}{}: {},\n", self.name, resolved_type).as_str())
             }
             TypeDef::NestedType(children) => {
@@ -185,7 +185,7 @@ pub fn define_type_based_on_usage(
 
                         create_type_definition_structure(
                             &mut root_type,
-                            &current_dot_expr.into(),
+                            &current_dot_expr,
                             vec![],
                         )
                     }
@@ -204,7 +204,7 @@ pub fn define_type_based_on_usage(
                             match get_parent_dot_expr(&current_dot_expr) {
                                 Some(parent) => create_type_definition_structure(
                                     &mut root_type,
-                                    &parent.into(),
+                                    &parent,
                                     vec![],
                                 ),
                                 None => include_destructured_properties(
@@ -311,7 +311,7 @@ fn create_type_definition_structure(
 
         path.push(name_prop.text());
 
-        if let Some(parent) = get_parent_dot_expr(&current_dot_expr) {
+        if let Some(parent) = get_parent_dot_expr(current_dot_expr) {
             debug!("Entering create_type_definition_structure()");
             create_type_definition_structure(&mut new_type_def, &parent, path);
         }
