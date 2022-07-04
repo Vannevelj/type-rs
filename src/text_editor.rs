@@ -1,12 +1,23 @@
 use log::debug;
-use rslint_parser::TextRange;
 
 struct Change(usize, String);
 
+#[derive(Debug)]
+pub struct Range {
+    start: usize,
+    end: usize
+}
+
+impl From<rslint_parser::TextRange> for Range {
+    fn from(text_range: rslint_parser::TextRange) -> Self {
+        Range { start: text_range.start().into(), end: text_range.end().into() }
+    }
+}
+
 pub trait TextEdit {
     fn load(text: impl ToString) -> TextEditor;
-    fn insert_after(&mut self, range: TextRange, text: impl ToString);
-    fn insert_before(&mut self, range: TextRange, text: impl ToString);
+    fn insert_after(&mut self, range: Range, text: impl ToString);
+    fn insert_before(&mut self, range: Range, text: impl ToString);
     fn apply(&mut self) -> String;
 }
 
@@ -23,16 +34,16 @@ impl TextEdit for TextEditor {
         }
     }
 
-    fn insert_after(&mut self, range: TextRange, text: impl ToString) {
+    fn insert_after(&mut self, range: Range, text: impl ToString) {
         debug!("FIXER insert_after: {:?}", range);
         self.changes
-            .push(Change(range.end().into(), text.to_string()));
+            .push(Change(range.end, text.to_string()));
     }
 
-    fn insert_before(&mut self, range: TextRange, text: impl ToString) {
+    fn insert_before(&mut self, range: Range, text: impl ToString) {
         debug!("FIXER insert_before: {:?}", range);
         self.changes
-            .push(Change(range.start().into(), text.to_string()));
+            .push(Change(range.start, text.to_string()));
     }
 
     fn apply(&mut self) -> String {

@@ -69,7 +69,7 @@ pub fn add_types(contents: String) -> String {
                             );
 
                             fixer.insert_before(
-                                start_of_file,
+                                start_of_file.into(),
                                 create_type_definition(usages, name.as_str()),
                             );
 
@@ -129,23 +129,23 @@ pub fn add_types(contents: String) -> String {
                                     ts_type: TypeDef::NestedType(Vec::new()),
                                 });
                                 fixer.insert_before(
-                                    start_of_file,
+                                    start_of_file.into(),
                                     create_type_definition(&props_definition, "Props"),
                                 );
                                 fixer.insert_before(
-                                    start_of_file,
+                                    start_of_file.into(),
                                     create_type_definition(state_usages, "State"),
                                 );
-                                fixer.insert_after(parent.range(), "<Props, State>")
+                                fixer.insert_after(parent.range().into(), "<Props, State>")
                             }
                             (None, Some(props_usages), None) => {
                                 fixer.insert_before(
-                                    start_of_file,
+                                    start_of_file.into(),
                                     create_type_definition(props_usages, "Props"),
                                 );
-                                fixer.insert_after(parent.range(), "<Props>")
+                                fixer.insert_after(parent.range().into(), "<Props>")
                             }
-                            (None, None, None) => fixer.insert_after(parent.range(), "<any, any>"),
+                            (None, None, None) => fixer.insert_after(parent.range().into(), "<any, any>"),
                             _ => continue,
                         };
                     }
@@ -177,7 +177,7 @@ fn update_pattern(
                     get_type_from_expression(&expr.or(None), &created_type)
                 {
                     debug!("FIXER insert: {span:?}");
-                    fixer.insert_after(span, format!(": {}", type_annotation));
+                    fixer.insert_after(span.into(), format!(": {}", type_annotation));
                 }
             }
         }
@@ -189,14 +189,14 @@ fn update_pattern(
             {
                 if let Some(name) = assign.syntax().child_with_ast::<Name>() {
                     debug!("FIXER insert: {:?}", name.range());
-                    fixer.insert_after(name.range(), format!(": {}", type_annotation));
+                    fixer.insert_after(name.range().into(), format!(": {}", type_annotation));
                 }
             }
         }
         Pattern::ObjectPattern(obj) if obj.ty().is_none() => {
             if let Some(type_annotation) = get_type_from_expression(&expr.or(None), &created_type) {
                 debug!("FIXER insert: {:?}", obj.range());
-                fixer.insert_after(obj.range(), format!(": {}", type_annotation));
+                fixer.insert_after(obj.range().into(), format!(": {}", type_annotation));
             }
         }
         // Pattern::ArrayPattern(array) => {
