@@ -4,7 +4,7 @@
         "ms-vscode.cpptools",
         "serayuzgur.crates",
         "usernamehw.errorlens",
-        "matklad.rust-analyzer",
+        "rust-lang.rust-analyzer",
         "vadimcn.vscode-lldb"
     ]
 }
