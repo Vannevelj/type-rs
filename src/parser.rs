@@ -116,6 +116,7 @@ pub fn add_types(contents: String) -> String {
             SyntaxKind::CLASS_DECL => {
                 let class = descendant.to::<ClassDecl>();
 
+                // Here, parent() does not refer to the AST but rather to the type being extended from
                 match class.parent() {
                     Some(parent) if is_react_component_class(&parent) => {
                         let props_fields = define_type_based_on_usage(&ast, "props");
